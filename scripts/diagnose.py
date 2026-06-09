@@ -53,6 +53,15 @@ def get_system_metrics():
     except Exception as e:
         print(f"  Failed to read disk usage: {e}")
 
+def check_port_in_use(port):
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", port))
+            return False
+        except socket.error:
+            return True
+
 def check_dependencies():
     print("\n--- [2/6] Dependencies & Path Integrity ---")
     # Game Exe
@@ -76,6 +85,14 @@ def check_dependencies():
             print(f"  [OK] '{cmd}' available on PATH: {path}")
         else:
             print(f"  [FAIL] '{cmd}' is NOT available on PATH!")
+
+    # Check Ports
+    for port in [12346, 12350]:
+        in_use = check_port_in_use(port)
+        if in_use:
+            print(f"  [WARNING] Port {port} is ALREADY IN USE by another process!")
+        else:
+            print(f"  [OK] Port {port} is free and available.")
 
 def run_api_call(port, method, params=None):
     url = f"http://127.0.0.1:{port}"
@@ -179,6 +196,12 @@ def diagnose_logs(port, wineprefix_dir):
                         print(f"    * {e}")
                 else:
                     print("  - [OK] No error/fail lines in Lovely Log.")
+                    
+                # Print the last 100 lines of Lovely Log for deep inspection
+                print(f"\n[Last 100 lines of Lovely Log {newest_log.name}]:")
+                log_lines = content.splitlines()
+                for l in log_lines[-100:]:
+                    print(f"  {l}")
             else:
                 print("  - [FAIL] No Lovely log files found inside logs directory.")
         else:
