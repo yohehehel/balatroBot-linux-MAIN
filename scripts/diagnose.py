@@ -105,11 +105,14 @@ def run_api_call(port, method, params=None):
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode('utf-8'),
-        headers={'Content-Type': 'application/json'}
+        headers={
+            'Content-Type': 'application/json',
+            'Connection': 'close'
+        }
     )
     t_start = time.monotonic()
     try:
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=1.0) as r:
             res = json.loads(r.read().decode('utf-8'))
             dt = time.monotonic() - t_start
             return res, dt, None

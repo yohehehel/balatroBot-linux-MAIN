@@ -18,7 +18,11 @@ class BalatroClient:
     def __init__(self, base_url: str = "http://127.0.0.1:12346", timeout: float = 120.0):
         self.base_url = base_url
         self.timeout = timeout
-        self.client = httpx.Client(base_url=self.base_url, timeout=self.timeout)
+        self.client = httpx.Client(
+            base_url=self.base_url,
+            timeout=self.timeout,
+            headers={"Connection": "close"}
+        )
         self._request_id = 1
 
     def _call(self, method: str, params: Optional[Dict[str, Any]] = None) -> Any:
