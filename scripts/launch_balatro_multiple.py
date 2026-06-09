@@ -244,7 +244,7 @@ def main():
             os.makedirs(instance_mods_dir, exist_ok=True)
             
             env["WINEPREFIX"] = wineprefix_dir
-            env["WINEDLLOVERRIDES"] = "version=n,b;mmdevapi=d;dsound=d"
+            env["WINEDLLOVERRIDES"] = "version=n,b"
             env["WINEDEBUG"] = "-all"
             env["ALSOFT_DRIVERS"] = "null"
             env["SDL_AUDIODRIVER"] = "dummy"

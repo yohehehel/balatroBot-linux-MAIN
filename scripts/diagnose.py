@@ -300,7 +300,7 @@ def test_debug_instance():
     print("  Launching Balatro under Xvfb (display :99)...")
     env = os.environ.copy()
     env["WINEPREFIX"] = str(wineprefix_dir)
-    env["WINEDLLOVERRIDES"] = "version=n,b;mmdevapi=d;dsound=d"
+    env["WINEDLLOVERRIDES"] = "version=n,b"
     env["WINEDEBUG"] = "-all"
     env["DISPLAY"] = ":99"
     env["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
