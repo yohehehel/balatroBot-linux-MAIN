@@ -114,6 +114,25 @@ def find_balatro_appdata(prefix_path):
                 return appdata_alt
     return None
 
+
+def get_or_create_balatro_appdata(prefix_path):
+    users_dir = Path(prefix_path) / "drive_c" / "users"
+    if not users_dir.exists():
+        return None
+    for p in users_dir.iterdir():
+        if p.is_dir() and p.name not in (".", ".."):
+            appdata_roaming = p / "AppData" / "Roaming"
+            if appdata_roaming.exists():
+                balatro_dir = appdata_roaming / "Balatro"
+                balatro_dir.mkdir(parents=True, exist_ok=True)
+                return balatro_dir
+            appdata_alt = p / "Application Data"
+            if appdata_alt.exists():
+                balatro_dir = appdata_alt / "Balatro"
+                balatro_dir.mkdir(parents=True, exist_ok=True)
+                return balatro_dir
+    return None
+
 def diagnose_logs(port, wineprefix_dir):
     print("\n--- [5/6] Analysing Instance Log Outputs ---")
     stdout_log = Path(f"/tmp/balatro_diag_stdout.log")
@@ -177,20 +196,71 @@ def test_debug_instance():
     if wineprefix_dir.exists():
         shutil.rmtree(wineprefix_dir)
         
-    # 2. Clone prefix from master if exists, otherwise fail (tells user they need to run setup)
-    if not master_prefix_dir.exists():
-        print(f"  [FAIL] Master prefix template /tmp/wine_master does not exist.")
-        print(f"         Please make sure setup_mods.py and run_training.py ran successfully.")
+    # 2. Clone prefix from master if exists, otherwise initialize fresh prefix
+    if master_prefix_dir.exists():
+        print(f"  Cloning WINEPREFIX from template /tmp/wine_master...")
+        shutil.copytree(master_prefix_dir, wineprefix_dir, symlinks=True)
+    else:
+        print(f"  Master prefix template NOT found. Initializing fresh WINEPREFIX at {wineprefix_dir}...")
+        wineprefix_dir.mkdir(parents=True, exist_ok=True)
+        boot_env = os.environ.copy()
+        boot_env["WINEPREFIX"] = str(wineprefix_dir)
+        boot_env["WINEDEBUG"] = "-all"
+        boot_env["DISPLAY"] = ":99"
+        boot_env["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
+        boot_env["GALLIUM_DRIVER"] = "llvmpipe"
+        subprocess.run(["wineboot", "-u"], env=boot_env, check=True)
+        
+        # Add DLL overrides registry entry
+        print("  Adding DLL override registry entry to debug WINEPREFIX...")
+        reg_env = os.environ.copy()
+        reg_env["WINEPREFIX"] = str(wineprefix_dir)
+        reg_env["WINEDEBUG"] = "-all"
+        reg_env["DISPLAY"] = ":99"
+        reg_env["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
+        reg_env["GALLIUM_DRIVER"] = "llvmpipe"
+        subprocess.run(
+            ["wine", "reg", "add", "HKCU\\Software\\Wine\\DllOverrides", "/v", "version", "/t", "REG_SZ", "/d", "n,b", "/f"],
+            env=reg_env,
+            check=True
+        )
+        
+        # Wait for wineserver to flush registry
+        print("  Waiting for wineserver to flush registry...")
+        wait_env = os.environ.copy()
+        wait_env["WINEPREFIX"] = str(wineprefix_dir)
+        subprocess.run(["wineserver", "-w"], env=wait_env)
+        
+    # Resolve original_balatro_dir
+    wineprefix = os.environ.get("WINEPREFIX", os.path.expanduser("~/.wine"))
+    original_balatro_dir = find_balatro_appdata(wineprefix)
+    if not original_balatro_dir or not original_balatro_dir.exists():
+        print("  [FAIL] Original Balatro AppData directory not found in ~/.wine.")
+        return
+
+    # Check isolated AppData mods copy
+    temp_balatro_dir = get_or_create_balatro_appdata(wineprefix_dir)
+    if not temp_balatro_dir:
+        print("  [FAIL] AppData folder creation failed inside debug WINEPREFIX.")
         return
         
-    print(f"  Cloning WINEPREFIX from template...")
-    shutil.copytree(master_prefix_dir, wineprefix_dir, symlinks=True)
+    # Copy mods and profile
+    print("  Copying mods to debug WINEPREFIX...")
+    instance_mods_dir = temp_balatro_dir / "Mods"
+    instance_mods_dir.mkdir(parents=True, exist_ok=True)
     
-    # Check isolated AppData mods copy
-    temp_balatro_dir = find_balatro_appdata(wineprefix_dir)
-    if not temp_balatro_dir:
-        print("  [FAIL] AppData folder not found inside WINEPREFIX.")
-        return
+    original_mods_dir = original_balatro_dir / "Mods"
+    if original_mods_dir.exists():
+        for mod_path in original_mods_dir.iterdir():
+            if mod_path.is_dir() and mod_path.name.lower() != "lovely":
+                shutil.copytree(mod_path, instance_mods_dir / mod_path.name, dirs_exist_ok=True)
+                
+    # Copy profile files (.jkr)
+    print("  Copying profile files to debug WINEPREFIX...")
+    for jkr_file in original_balatro_dir.glob("*.jkr"):
+        dest = temp_balatro_dir / jkr_file.name
+        if not dest.exists():
+            shutil.copy2(jkr_file, dest)
         
     # Launch via Wine + Xvfb
     print("  Launching Balatro under Xvfb (display :99)...")
