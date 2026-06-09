@@ -454,29 +454,49 @@ def main():
         print(f"Started instance on port {port} (PID: {p.pid})")
         time.sleep(2.0)
         
-    print("Waiting 60 seconds for initialization...")
-    time.sleep(60)
-    
-    # Check health
-    all_healthy = True
-    for port in ports:
-        passed, error = check_health(port)
-        if passed:
-            print(f"Health check PASSED for port {port}")
-        else:
-            print(f"Health check FAILED for port {port}: {error}")
-            all_healthy = False
-            
-            # Print process status
-            idx = ports.index(port)
-            proc = processes[idx][0]
-            exit_code = proc.poll()
-            print(f"Process PID: {proc.pid}, status (None=running, integer=exited): {exit_code}")
-            
-            try:
-                dump_instance_logs(port, original_balatro_dir)
-            except Exception as de:
-                print(f"Failed to dump logs: {de}")
+    print("Waiting for instances to initialize (polling for up to 120 seconds)...")
+    t_start = time.time()
+    all_healthy = False
+    while time.time() - t_start < 120:
+        time.sleep(2.0)
+        
+        # Check if any process has exited early
+        for p, _, _ in processes:
+            if p.poll() is not None:
+                print(f"Warning: Balatro process (PID {p.pid}) terminated early with exit code {p.poll()}")
+                
+        # Check health of all instances
+        current_healthy = True
+        for port in ports:
+            passed, error = check_health(port)
+            if not passed:
+                current_healthy = False
+                break
+        if current_healthy:
+            print(f"All instances are healthy and initialized after {time.time() - t_start:.1f} seconds!")
+            all_healthy = True
+            break
+    else:
+        # Final evaluation check and log dump for failures
+        all_healthy = True
+        for port in ports:
+            passed, error = check_health(port)
+            if passed:
+                print(f"Health check PASSED for port {port}")
+            else:
+                print(f"Health check FAILED for port {port}: {error}")
+                all_healthy = False
+                
+                # Print process status
+                idx = ports.index(port)
+                proc = processes[idx][0]
+                exit_code = proc.poll()
+                print(f"Process PID: {proc.pid}, status (None=running, integer=exited): {exit_code}")
+                
+                try:
+                    dump_instance_logs(port, original_balatro_dir)
+                except Exception as de:
+                    print(f"Failed to dump logs: {de}")
             
     if not all_healthy:
         print("Not all instances started successfully. Aborting training.")

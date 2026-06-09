@@ -345,6 +345,17 @@ end""".replace('\r\n', '\n')
             print("Applying BalatroBot balatrobot.lua bypass patch...")
             content = balatrobot_lua_path.read_text(encoding="utf-8")
             bypass_code = """
+-- Suppress "LONG DT" spam caused by the 10x Speed Hack dt override
+local original_print = print
+local lua_unpack = unpack or table.unpack
+print = function(...)
+  local args = {...}
+  if #args > 0 and type(args[1]) == "string" and (args[1]:sub(1, 7) == "LONG DT" or args[1]:find("LONG DT")) then
+    return
+  end
+  original_print(lua_unpack(args))
+end
+
 -- Bypass unlock popups to prevent the game/API from hanging during automated bot training
 local original_create_unlock_overlay = create_unlock_overlay
 create_unlock_overlay = function(key)
