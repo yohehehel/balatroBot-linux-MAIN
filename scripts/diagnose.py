@@ -5,6 +5,7 @@ import time
 import subprocess
 import urllib.request
 import json
+import signal
 from pathlib import Path
 
 # Paths
@@ -212,11 +213,122 @@ def diagnose_logs(port, wineprefix_dir):
     else:
         print("  - [FAIL] Could not locate Balatro AppData inside prefix.")
 
+def start_xvfb(display_num=99):
+    """Start a standalone Xvfb server and wait for it to be ready.
+    
+    Returns the Xvfb subprocess.Popen object.
+    """
+    # Kill any existing Xvfb on this display and clean up stale files
+    lock_file = f"/tmp/.X{display_num}-lock"
+    socket_file = f"/tmp/.X11-unix/X{display_num}"
+
+    # Try to read PID from lock file and kill that process
+    if os.path.exists(lock_file):
+        try:
+            with open(lock_file, "r") as f:
+                old_pid = int(f.read().strip())
+            os.kill(old_pid, signal.SIGTERM)
+            time.sleep(0.5)
+            try:
+                os.kill(old_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            print(f"  Killed stale Xvfb (PID {old_pid}) on display :{display_num}")
+        except (ValueError, ProcessLookupError, PermissionError, FileNotFoundError):
+            pass
+
+    # Also pkill any Xvfb that might be on this display
+    subprocess.run(
+        ["pkill", "-f", f"Xvfb :{display_num}"],
+        capture_output=True
+    )
+    time.sleep(0.3)
+
+    for f in [lock_file, socket_file]:
+        if os.path.exists(f):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+
+    print(f"Starting Xvfb on display :{display_num}...")
+    xvfb_proc = subprocess.Popen(
+        [
+            "Xvfb", f":{display_num}",
+            "-screen", "0", "1024x768x24",
+            "-ac",  # disable access control for simplicity
+            "+extension", "GLX",  # ensure GLX extension is loaded
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+
+    # Wait for Xvfb to be ready (lock file appears)
+    for _ in range(50):  # up to 5 seconds
+        if os.path.exists(lock_file):
+            break
+        # Check if process died
+        if xvfb_proc.poll() is not None:
+            stderr_output = xvfb_proc.stderr.read().decode(errors="ignore")
+            raise RuntimeError(f"Xvfb failed to start (exit {xvfb_proc.returncode}): {stderr_output}")
+        time.sleep(0.1)
+    else:
+        # Last chance check
+        if not os.path.exists(lock_file):
+            xvfb_proc.kill()
+            raise RuntimeError(f"Xvfb did not create lock file {lock_file} within 5 seconds")
+
+    print(f"Xvfb started successfully on :{display_num} (PID: {xvfb_proc.pid})")
+    return xvfb_proc
+
+
+def stop_xvfb(xvfb_proc):
+    """Gracefully stop a Xvfb process."""
+    if xvfb_proc is None:
+        return
+    try:
+        xvfb_proc.terminate()
+        xvfb_proc.wait(timeout=5)
+    except Exception:
+        try:
+            xvfb_proc.kill()
+        except Exception:
+            pass
+    print("Xvfb server stopped.")
+
+
 def test_debug_instance():
     print("\n--- [3/6] Starting Debug isolated Instance ---")
     port = 12350
     wineprefix_dir = Path("/tmp/wine_diag")
     master_prefix_dir = Path("/tmp/wine_master")
+    
+    # Start Xvfb if not running on display :99
+    xvfb_proc = None
+    if sys.platform == "linux":
+        display_active = False
+        lock_file = "/tmp/.X99-lock"
+        if os.path.exists(lock_file):
+            try:
+                with open(lock_file, "r") as f:
+                    pid = int(f.read().strip())
+                os.kill(pid, 0)
+                display_active = True
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                display_active = True
+            except Exception:
+                pass
+
+        if display_active:
+            print("  Detected an active display server on :99. Using existing display...")
+        else:
+            try:
+                xvfb_proc = start_xvfb(99)
+            except Exception as e:
+                print(f"  [FAIL] Failed to start Xvfb: {e}")
+                return
     
     # 1. Clean up old prefix
     if wineprefix_dir.exists():
@@ -301,7 +413,7 @@ def test_debug_instance():
     env = os.environ.copy()
     env["WINEPREFIX"] = str(wineprefix_dir)
     env["WINEDLLOVERRIDES"] = "version=n,b"
-    env["WINEDEBUG"] = "-all"
+    env["WINEDEBUG"] = ""
     env["DISPLAY"] = ":99"
     env["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
     env["GALLIUM_DRIVER"] = "llvmpipe"
@@ -403,6 +515,11 @@ def test_debug_instance():
     # Remove diag prefix
     if wineprefix_dir.exists():
         shutil.rmtree(wineprefix_dir)
+        
+    # Stop Xvfb if we started it
+    if xvfb_proc:
+        stop_xvfb(xvfb_proc)
+        
     print("\nDiagnostics complete!")
 
 if __name__ == "__main__":
