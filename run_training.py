@@ -360,14 +360,19 @@ def main():
         else:
             cmd_launch = [str(balatro_exe)]
             
+        stdout_log_path = original_balatro_dir / f"instance_{port}_stdout.log"
+        stderr_log_path = original_balatro_dir / f"instance_{port}_stderr.log"
+        stdout_file = open(stdout_log_path, "w", encoding="utf-8", errors="ignore")
+        stderr_file = open(stderr_log_path, "w", encoding="utf-8", errors="ignore")
+
         p = subprocess.Popen(
             cmd_launch,
             cwd=str(balatro_exe.parent),
             env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stdout=stdout_file,
+            stderr=stderr_file
         )
-        processes.append((p, None, None))
+        processes.append((p, stdout_file, stderr_file))
         print(f"Started instance on port {port} (PID: {p.pid})")
         time.sleep(2.0)
         
