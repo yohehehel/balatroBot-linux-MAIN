@@ -297,11 +297,13 @@ def test_debug_instance():
     print("  Launching Balatro under Xvfb (display :99)...")
     env = os.environ.copy()
     env["WINEPREFIX"] = str(wineprefix_dir)
-    env["WINEDLLOVERRIDES"] = "version=n,b"
+    env["WINEDLLOVERRIDES"] = "version=n,b;mmdevapi=d;dsound=d"
     env["WINEDEBUG"] = "-all"
     env["DISPLAY"] = ":99"
     env["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
     env["GALLIUM_DRIVER"] = "llvmpipe"
+    env["ALSOFT_DRIVERS"] = "null"
+    env["SDL_AUDIODRIVER"] = "dummy"
     
     env["BALATROBOT_HOST"] = "127.0.0.1"
     env["BALATROBOT_PORT"] = str(port)

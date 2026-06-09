@@ -387,8 +387,10 @@ def main():
             os.makedirs(instance_mods_dir, exist_ok=True)
             
             env["WINEPREFIX"] = wineprefix_dir
-            env["WINEDLLOVERRIDES"] = "version=n,b"
-            env["WINEDEBUG"] = ""
+            env["WINEDLLOVERRIDES"] = "version=n,b;mmdevapi=d;dsound=d"
+            env["WINEDEBUG"] = "-all"
+            env["ALSOFT_DRIVERS"] = "null"
+            env["SDL_AUDIODRIVER"] = "dummy"
         else:
             instance_mods_dir = original_balatro_dir / f"Mods_Instance_{port}"
             # Clean and copy mods to isolated folder
