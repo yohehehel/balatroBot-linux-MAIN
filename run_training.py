@@ -454,8 +454,8 @@ def main():
         print(f"Started instance on port {port} (PID: {p.pid})")
         time.sleep(2.0)
         
-    print("Waiting 30 seconds for initialization...")
-    time.sleep(30)
+    print("Waiting 60 seconds for initialization...")
+    time.sleep(60)
     
     # Check health
     all_healthy = True

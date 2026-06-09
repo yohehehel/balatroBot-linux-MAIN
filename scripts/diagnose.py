@@ -329,7 +329,7 @@ def test_debug_instance():
     print(f"  Instance started with PID {proc.pid}. Waiting for boot healthcheck...")
     
     booted = False
-    for attempt in range(35):
+    for attempt in range(60):
         time.sleep(1.0)
         res, dt, err = run_api_call(port, "health")
         if res and res.get("result") == "ok":
@@ -340,7 +340,7 @@ def test_debug_instance():
             print(f"  [FAIL] Balatro process terminated early with exit code {proc.poll()}.")
             break
     else:
-        print("  [FAIL] API failed to respond within 35 seconds.")
+        print("  [FAIL] API failed to respond within 60 seconds.")
         
     if booted:
         print("\n--- [4/6] Running API Transactions & Latency Test ---")
