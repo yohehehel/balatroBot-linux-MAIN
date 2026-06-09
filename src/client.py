@@ -15,7 +15,7 @@ class BalatroAPIError(Exception):
 
 
 class BalatroClient:
-    def __init__(self, base_url: str = "http://127.0.0.1:12346", timeout: float = 10.0):
+    def __init__(self, base_url: str = "http://127.0.0.1:12346", timeout: float = 120.0):
         self.base_url = base_url
         self.timeout = timeout
         self.client = httpx.Client(base_url=self.base_url, timeout=self.timeout)

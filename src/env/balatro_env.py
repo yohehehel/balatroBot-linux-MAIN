@@ -18,7 +18,7 @@ MAX_SHOP_ACTIONS = 20
 class BalatroEnv(gym.Env):
     metadata = {"render_modes": []}
 
-    def __init__(self, base_url: str = "http://127.0.0.1:12346", timeout: float = 30.0,
+    def __init__(self, base_url: str = "http://127.0.0.1:12346", timeout: float = 120.0,
                  deck: str = "YELLOW", stake: str = "WHITE"):
         super().__init__()
         self.client = BalatroClient(base_url=base_url, timeout=timeout)
