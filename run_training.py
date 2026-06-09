@@ -364,7 +364,7 @@ def main():
         if sys.platform == "linux":
             env["DISPLAY"] = xvfb_display
             cmd_launch = [
-                "wine64",
+                "wine",
                 str(balatro_exe)
             ]
         else:
