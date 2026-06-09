@@ -343,6 +343,14 @@ def main():
                 check=True
             )
             
+            # Disable Wine audio backend to prevent 30-second ALSA/OpenAL device timeouts in headless VMs
+            print("Disabling Wine audio driver in master WINEPREFIX...")
+            subprocess.run(
+                ["wine", "reg", "add", "HKCU\\Software\\Wine\\Drivers", "/v", "Audio", "/t", "REG_SZ", "/d", "", "/f"],
+                env=reg_env,
+                check=True
+            )
+            
             # Wait for wineserver to completely flush registry and shut down before cloning
             print("Waiting for master wineserver to flush registries and shutdown...")
             wait_env = os.environ.copy()
