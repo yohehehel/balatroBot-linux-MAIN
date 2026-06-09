@@ -434,8 +434,13 @@ love.update = function(dt)
   end
   if Moveable and not moveable_hooked then
     local original_move_xy = Moveable.move_xy
+    local moveable_logged = false
     Moveable.move_xy = function(self, dt_param)
       if BB_SETTINGS and BB_SETTINGS.headless then
+        if not moveable_logged then
+          sendInfoMessage("[DIAGNOSTIC] Moveable.move_xy easing bypass active", "BB.MOD")
+          moveable_logged = true
+        end
         self.VT.x = self.T.x
         self.VT.y = self.T.y
         self.velocity.x = 0
@@ -473,7 +478,12 @@ end
 -- Hook EventManager:update to multiply delta time by 10x for resolving animations instantly
 if EventManager then
   local old_event_update = EventManager.update
+  local event_manager_logged = false
   EventManager.update = function(self, dt, forced)
+    if not event_manager_logged then
+      sendInfoMessage("[DIAGNOSTIC] EventManager.update 10x speed multiplier active", "BB.MOD")
+      event_manager_logged = true
+    end
     return old_event_update(self, dt * 10.0, forced)
   end
 end

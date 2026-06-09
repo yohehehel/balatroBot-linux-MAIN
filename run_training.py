@@ -180,6 +180,64 @@ def terminate_processes(processes):
                     pass
     print("All Balatro processes cleaned up.")
 
+def dump_instance_logs(port, original_balatro_dir, lines_count=40):
+    """Prints the last N lines of stdout, stderr, and lovely logs for a given instance."""
+    print(f"\n==========================================")
+    print(f"  DIAGNOSTIC LOG DUMP FOR PORT {port}")
+    print(f"==========================================")
+    
+    # 1. Balatro Stdout log
+    stdout_log = original_balatro_dir / f"instance_{port}_stdout.log"
+    if stdout_log.exists():
+        print(f"\n[Last {lines_count} lines of {stdout_log.name}]:")
+        try:
+            with open(stdout_log, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+                print("".join(lines[-lines_count:]))
+        except Exception as e:
+            print(f"Could not read stdout log: {e}")
+    else:
+        print(f"\nStdout log not found at {stdout_log}")
+        
+    # 2. Balatro Stderr log
+    stderr_log = original_balatro_dir / f"instance_{port}_stderr.log"
+    if stderr_log.exists():
+        print(f"\n[Last {lines_count} lines of {stderr_log.name}]:")
+        try:
+            with open(stderr_log, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+                print("".join(lines[-lines_count:]))
+        except Exception as e:
+            print(f"Could not read stderr log: {e}")
+    else:
+        print(f"\nStderr log not found at {stderr_log}")
+
+    # 3. Lovely logs inside the Wine prefix (for Linux)
+    if sys.platform == "linux":
+        wineprefix_dir = Path(f"/tmp/wine_env_{port}")
+        temp_balatro_dir = find_balatro_appdata(wineprefix_dir)
+        if temp_balatro_dir:
+            lovely_log_dir = temp_balatro_dir / "Mods" / "lovely" / "log"
+            if lovely_log_dir.exists():
+                log_files = list(lovely_log_dir.glob("lovely-*.log"))
+                if log_files:
+                    newest_log = max(log_files, key=os.path.getmtime)
+                    print(f"\n[Last {lines_count} lines of Lovely log {newest_log.name}]:")
+                    try:
+                        with open(newest_log, "r", encoding="utf-8", errors="ignore") as f:
+                            lines = f.readlines()
+                            print("".join(lines[-lines_count:]))
+                    except Exception as e:
+                        print(f"Could not read Lovely log: {e}")
+                else:
+                    print("\nNo Lovely log files found.")
+            else:
+                print(f"\nLovely log directory not found at {lovely_log_dir}")
+        else:
+            print("\nCould not locate Balatro AppData inside prefix for Lovely logs.")
+    print(f"==========================================\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run parallel Balatro bot PPO training with managed instances.")
     parser.add_argument("--num-instances", type=int, default=2, help="Number of Balatro instances to run in parallel.")
@@ -405,62 +463,10 @@ def main():
             exit_code = proc.poll()
             print(f"Process PID: {proc.pid}, status (None=running, integer=exited): {exit_code}")
             
-            # Print the last few lines of logs for debugging
-            print(f"--- Debugging logs for port {port} ---")
-            
-            # 1. Balatro Stdout/Stderr logs
-            stdout_log = original_balatro_dir / f"instance_{port}_stdout.log"
-            stderr_log = original_balatro_dir / f"instance_{port}_stderr.log"
-            
-            if stdout_log.exists():
-                print(f"\n[Last 20 lines of {stdout_log.name}]:")
-                try:
-                    with open(stdout_log, "r", encoding="utf-8", errors="ignore") as f:
-                        lines = f.readlines()
-                        print("".join(lines[-20:]))
-                except Exception as le:
-                    print(f"Could not read stdout log: {le}")
-            else:
-                print(f"\nStdout log not found at {stdout_log}")
-                
-            if stderr_log.exists():
-                print(f"\n[Last 20 lines of {stderr_log.name}]:")
-                try:
-                    with open(stderr_log, "r", encoding="utf-8", errors="ignore") as f:
-                        lines = f.readlines()
-                        print("".join(lines[-20:]))
-                except Exception as le:
-                    print(f"Could not read stderr log: {le}")
-            else:
-                print(f"\nStderr log not found at {stderr_log}")
-
-            # 2. Lovely logs inside the Wine prefix (for Linux)
-            if sys.platform == "linux":
-                wineprefix_dir = Path(f"/tmp/wine_env_{port}")
-                temp_balatro_dir = find_balatro_appdata(wineprefix_dir)
-                if temp_balatro_dir:
-                    lovely_log_dir = temp_balatro_dir / "Mods" / "lovely" / "log"
-                    if lovely_log_dir.exists():
-                        print(f"\nLovely log directory found at {lovely_log_dir}. Scanning for logs...")
-                        # Find the newest log file
-                        log_files = list(lovely_log_dir.glob("lovely-*.log"))
-                        if log_files:
-                            newest_log = max(log_files, key=os.path.getmtime)
-                            print(f"[Lovely log: {newest_log.name} ({len(open(newest_log, 'r', errors='ignore').readlines())} lines total)]:")
-                            try:
-                                with open(newest_log, "r", encoding="utf-8", errors="ignore") as f:
-                                    content = f.read()
-                                    print(f"\n--- Full Lovely log ---")
-                                    print(content)
-                            except Exception as le:
-                                print(f"Could not read Lovely log: {le}")
-                        else:
-                            print("No Lovely log files found in the directory.")
-                    else:
-                        print(f"Lovely log directory not found at {lovely_log_dir}")
-                else:
-                    print("Could not find Balatro AppData inside prefix to locate Lovely logs.")
-            print(f"---------------------------------------")
+            try:
+                dump_instance_logs(port, original_balatro_dir)
+            except Exception as de:
+                print(f"Failed to dump logs: {de}")
             
     if not all_healthy:
         print("Not all instances started successfully. Aborting training.")
@@ -504,8 +510,20 @@ def main():
         print("Training session finished successfully!")
     except KeyboardInterrupt:
         print("Training interrupted by user. Cleaning up...")
+        # Dump logs for all instances to help debug hang
+        for port in ports:
+            try:
+                dump_instance_logs(port, original_balatro_dir)
+            except Exception as de:
+                print(f"Failed to dump logs for port {port}: {de}")
     except Exception as e:
         print(f"Error during training: {e}")
+        # Dump logs for all instances
+        for port in ports:
+            try:
+                dump_instance_logs(port, original_balatro_dir)
+            except Exception as de:
+                print(f"Failed to dump logs for port {port}: {de}")
     finally:
         terminate_processes(processes)
         stop_xvfb(xvfb_proc)
