@@ -1,0 +1,161 @@
+import os
+import json
+import time
+import numpy as np
+from stable_baselines3.common.callbacks import BaseCallback
+
+class BalatroMetricsCallback(BaseCallback):
+    """
+    Custom callback for logging Balatro-specific metrics (win rate, max ante, money, etc.)
+    to TensorBoard and the console, maintaining a local high-score file, and managing
+    checkpoints (keeping only the latest to save disk space).
+    """
+    def __init__(self, save_freq: int = 10000, model_dir: str = "models", verbose: int = 0):
+        super().__init__(verbose)
+        self.episode_wons = []
+        self.episode_antes = []
+        self.episode_moneys = []
+        self.episode_rounds = []
+        self.episode_chips = []
+        
+        self.save_freq = save_freq
+        self.model_dir = model_dir
+        self.last_saved_path = None
+        self.last_saved_step = 0
+        self.start_time = time.time()
+        
+        self.records_path = "logs/best_records.json"
+        self.best_records = {
+            "best_ante": 1,
+            "best_money": 0.0,
+            "best_chips": 0.0,
+            "total_episodes": 0
+        }
+        self._load_records()
+
+    def _load_records(self):
+        if os.path.exists(self.records_path):
+            try:
+                with open(self.records_path, "r", encoding="utf-8") as f:
+                    self.best_records.update(json.load(f))
+            except Exception:
+                pass
+
+    def _save_records(self):
+        os.makedirs(os.path.dirname(self.records_path), exist_ok=True)
+        try:
+            with open(self.records_path, "w", encoding="utf-8") as f:
+                json.dump(self.best_records, f, indent=4)
+        except Exception:
+            pass
+
+    def _on_step(self) -> bool:
+        # Check if there are any environment info updates (SB3 VecEnv passes infos)
+        for info in self.locals.get("infos", []):
+            if "episode_metrics" in info:
+                metrics = info["episode_metrics"]
+                won = bool(metrics.get("won", False))
+                ante = int(metrics.get("ante", 1))
+                money = float(metrics.get("money", 0.0))
+                round_num = int(metrics.get("round", 0))
+                chips = float(metrics.get("chips", 0.0))
+
+                self.episode_wons.append(float(won))
+                self.episode_antes.append(float(ante))
+                self.episode_moneys.append(money)
+                self.episode_rounds.append(float(round_num))
+                self.episode_chips.append(chips)
+
+                # Check and update historical best records
+                updated = False
+                self.best_records["total_episodes"] += 1
+                if ante > self.best_records["best_ante"]:
+                    self.best_records["best_ante"] = ante
+                    updated = True
+                if money > self.best_records["best_money"]:
+                    self.best_records["best_money"] = money
+                    updated = True
+                if chips > self.best_records["best_chips"]:
+                    self.best_records["best_chips"] = chips
+                    updated = True
+
+                if updated:
+                    self._save_records()
+
+        # Handle checkpoint saving with deletion of the previous checkpoint
+        if self.save_freq > 0 and self.num_timesteps - self.last_saved_step >= self.save_freq:
+            self.last_saved_step = self.num_timesteps
+            new_save_path = os.path.join(self.model_dir, f"ppo_balatro_{self.num_timesteps}_steps.zip")
+            try:
+                self.model.save(new_save_path)
+                print(f"\n[Saver] Checkpoint saved: {new_save_path}")
+                
+                # Delete the previous checkpoint file if it exists to save disk space
+                if self.last_saved_path and os.path.exists(self.last_saved_path):
+                    try:
+                        os.remove(self.last_saved_path)
+                        print(f"[Saver] Deleted previous checkpoint file to save disk space: {self.last_saved_path}")
+                    except Exception as e:
+                        print(f"[Saver] Warning: Could not remove previous checkpoint file {self.last_saved_path}: {e}")
+                
+                self.last_saved_path = new_save_path
+            except Exception as e:
+                print(f"[Saver] Error saving checkpoint: {e}")
+
+        return True
+
+    def _on_rollout_end(self) -> None:
+        """
+        Called when a rollout ends. Logs to console/TensorBoard and clears history.
+        """
+        total_steps = getattr(self.model, "total_timesteps", 0)
+        current_steps = self.num_timesteps
+        
+        # Guard against MagicMock or non-number objects in tests
+        if not isinstance(total_steps, (int, float)):
+            total_steps = 0
+        if not isinstance(current_steps, (int, float)):
+            current_steps = 0
+            
+        percent = (current_steps / total_steps) * 100 if total_steps > 0 else 0
+        
+        # Calculate speed (FPS)
+        elapsed_time = time.time() - self.start_time
+        fps = current_steps / elapsed_time if elapsed_time > 0 else 0.0
+        
+        # Get mean reward from SB3's ep_info_buffer
+        mean_reward = 0.0
+        if len(self.model.ep_info_buffer) > 0:
+            mean_reward = np.mean([ep_info["r"] for ep_info in self.model.ep_info_buffer])
+            
+        print("\n================== TRAINING MONITOR ==================")
+        print(f"Progress:  {current_steps}/{total_steps} steps ({percent:.1f}%)")
+        print(f"Speed:     {fps:.1f} steps/second")
+        print(f"Mean Reward (last 100 eps): {mean_reward:.2f}")
+        
+        if len(self.episode_wons) > 0:
+            win_rate = np.mean(self.episode_wons) * 100
+            mean_ante = np.mean(self.episode_antes)
+            mean_money = np.mean(self.episode_moneys)
+            mean_chips = np.mean(self.episode_chips)
+            print(f"Win Rate:  {win_rate:.1f}%")
+            print(f"Mean Max Ante: {mean_ante:.1f}")
+            print(f"Mean Money: ${mean_money:.2f}")
+            print(f"Mean Chips: {mean_chips:.1f}")
+        
+        print(f"Best Records: Ante {self.best_records['best_ante']} | Money ${self.best_records['best_money']:.2f} | Chips {self.best_records['best_chips']:.1f}")
+        print("======================================================\n")
+
+        if len(self.episode_wons) > 0:
+            self.logger.record("balatro/win_rate", np.mean(self.episode_wons))
+            self.logger.record("balatro/mean_max_ante", np.mean(self.episode_antes))
+            self.logger.record("balatro/mean_money", np.mean(self.episode_moneys))
+            self.logger.record("balatro/mean_round_num", np.mean(self.episode_rounds))
+            self.logger.record("balatro/mean_final_chips", np.mean(self.episode_chips))
+            
+            # Clear history
+            self.episode_wons.clear()
+            self.episode_antes.clear()
+            self.episode_moneys.clear()
+            self.episode_rounds.clear()
+            self.episode_chips.clear()
