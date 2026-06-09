@@ -60,6 +60,9 @@ def start_xvfb(display_num=99):
                 pass
 
     print(f"Starting Xvfb on display :{display_num}...")
+    xvfb_env = os.environ.copy()
+    xvfb_env["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
+    xvfb_env["GALLIUM_DRIVER"] = "llvmpipe"
     xvfb_proc = subprocess.Popen(
         [
             "Xvfb", f":{display_num}",
@@ -69,6 +72,7 @@ def start_xvfb(display_num=99):
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
+        env=xvfb_env
     )
 
     # Wait for Xvfb to be ready (lock file appears)
@@ -263,6 +267,8 @@ def main():
             boot_env["WINEPREFIX"] = str(master_prefix_dir)
             boot_env["WINEDEBUG"] = "-all"
             boot_env["DISPLAY"] = xvfb_display
+            boot_env["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
+            boot_env["GALLIUM_DRIVER"] = "llvmpipe"
             subprocess.run(["wineboot", "-u"], env=boot_env, check=True)
             
             # Add DLL overrides registry entry to master template
@@ -271,6 +277,8 @@ def main():
             reg_env["WINEPREFIX"] = str(master_prefix_dir)
             reg_env["WINEDEBUG"] = "-all"
             reg_env["DISPLAY"] = xvfb_display
+            reg_env["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
+            reg_env["GALLIUM_DRIVER"] = "llvmpipe"
             subprocess.run(
                 ["wine", "reg", "add", "HKCU\\Software\\Wine\\DllOverrides", "/v", "version", "/t", "REG_SZ", "/d", "n,b", "/f"],
                 env=reg_env,
@@ -286,6 +294,8 @@ def main():
     print(f"Launching {args.num_instances} Balatro instances...")
     for port in ports:
         env = os.environ.copy()
+        env["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
+        env["GALLIUM_DRIVER"] = "llvmpipe"
         
         if sys.platform == "linux":
             # Isolate via WINEPREFIX on Linux
