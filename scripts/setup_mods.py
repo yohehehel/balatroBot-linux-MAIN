@@ -339,6 +339,64 @@ end""".replace('\r\n', '\n')
                 start_lua_path.write_text(content, encoding="utf-8")
                 print("start.lua patched successfully.")
 
+        # Patch play.lua to avoid brittle UI-bound checks during ROUND_EVAL
+        play_lua_path = bot_mod_dir / "src" / "lua" / "endpoints" / "play.lua"
+        if play_lua_path.exists():
+            print("Applying BalatroBot play.lua ROUND_EVAL bypass patch...")
+            content = play_lua_path.read_text(encoding="utf-8").replace('\r\n', '\n')
+            
+            target_block = """        if G.STATE == G.STATES.ROUND_EVAL then
+          -- Early exit if basic conditions not met
+          if not G.round_eval or not G.STATE_COMPLETE or G.CONTROLLER.locked then
+            return false
+          end
+
+          -- Game is won
+          if G.GAME.won then
+            sendDebugMessage("Return play() - won", "BB.ENDPOINTS")
+            local state_data = BB_GAMESTATE.get_gamestate()
+            send_response(state_data)
+            return true
+          end
+
+          -- Wait for first scoring row (blind1) to be added to the UI
+          -- This ensures the main scoring events have started processing
+          local has_blind1 = G.round_eval:get_UIE_by_ID("dollar_blind1") ~= nil
+
+          -- Wait for cash_out_button to ensure the last scoring row (bottom) has been processed
+          local has_cash_out_button = false
+          for _, b in ipairs(G.I.UIBOX) do
+            if b:get_UIE_by_ID("cash_out_button") then
+              has_cash_out_button = true
+              break
+            end
+          end
+
+          -- Both first and last scoring rows must be present
+          if has_blind1 and has_cash_out_button then
+            local state_data = BB_GAMESTATE.get_gamestate()
+            sendDebugMessage("Return play() - cash out", "BB.ENDPOINTS")
+            send_response(state_data)
+            return true
+          end
+        end"""
+            
+            replacement_block = """        if G.STATE == G.STATES.ROUND_EVAL then
+          if G.round_eval and G.STATE_COMPLETE and not G.CONTROLLER.locked then
+            local state_data = BB_GAMESTATE.get_gamestate()
+            sendDebugMessage("Return play() - cash out", "BB.ENDPOINTS")
+            send_response(state_data)
+            return true
+          end
+        end"""
+            
+            if target_block in content:
+                content = content.replace(target_block, replacement_block)
+                play_lua_path.write_text(content, encoding="utf-8")
+                print("play.lua patched successfully.")
+            else:
+                print("Warning: target_block not found in play.lua")
+
          # Patch balatrobot.lua to override create_unlock_overlay, bypass unlock popups, and disable rendering
         balatrobot_lua_path = bot_mod_dir / "balatrobot.lua"
         if balatrobot_lua_path.exists():
