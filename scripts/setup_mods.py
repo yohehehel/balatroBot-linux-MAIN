@@ -360,6 +360,15 @@ end
 local original_create_unlock_overlay = create_unlock_overlay
 create_unlock_overlay = function(key)
   sendInfoMessage("Bypassing unlock overlay popup for key: " .. tostring(key), "BB.MOD")
+  if G then
+    G.SETTINGS.paused = false
+    if G.CONTROLLER then
+      G.CONTROLLER.locked = false
+    end
+    if G.E_MANAGER and G.E_MANAGER.queues and G.E_MANAGER.queues.unlock then
+      G.E_MANAGER.queues.unlock = {}
+    end
+  end
 end
 
 -- Force Love2D à ignorer la perte de focus sous Xvfb
@@ -428,6 +437,16 @@ love.update = function(dt)
   if G and G.SETTINGS then
     G.SETTINGS.gamespeed = 100.0
     G.SETTINGS.GAMESPEED = 100.0
+  end
+  
+  -- Periodically clear unlock queues and unlock controller if stuck
+  if G and G.E_MANAGER and G.E_MANAGER.queues and G.E_MANAGER.queues.unlock and #G.E_MANAGER.queues.unlock > 0 then
+    sendInfoMessage("Active unlock queue detected during update (size: " .. #G.E_MANAGER.queues.unlock .. "). Clearing and unlocking...", "BB.MOD")
+    G.E_MANAGER.queues.unlock = {}
+    G.SETTINGS.paused = false
+    if G.CONTROLLER then
+      G.CONTROLLER.locked = false
+    end
   end
   if G and G.FUNCS and G.FUNCS.cash_out and not cash_out_hooked then
     local original_cash_out = G.FUNCS.cash_out
