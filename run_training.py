@@ -363,6 +363,11 @@ def main():
         env["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
         env["GALLIUM_DRIVER"] = "llvmpipe"
         
+        # Prevent Balatro/Wine processes from inheriting PyTorch's 1-thread limit
+        for thread_env in ["OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"]:
+            if thread_env in env:
+                del env[thread_env]
+        
         if sys.platform == "linux":
             # Isolate via WINEPREFIX on Linux
             wineprefix_dir = f"/tmp/wine_env_{port}"
