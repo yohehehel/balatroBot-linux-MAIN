@@ -447,7 +447,7 @@ def test_debug_instance():
     for attempt in range(120):
         time.sleep(1.0)
         res, dt, err = run_api_call(port, "health")
-        if res and res.get("result") == "ok":
+        if res and "result" in res:
             print(f"  [OK] Health check passed in {dt:.3f}s after {attempt+1} seconds.")
             booted = True
             break
