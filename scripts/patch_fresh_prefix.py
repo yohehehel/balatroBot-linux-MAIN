@@ -34,12 +34,21 @@ position = "before"
 match_indent = true
 payload = """
     -- [BalatroBot] Guard for fresh Wine prefix with no saved profile
-    if not G.SETTINGS.tutorial_progress then
-        G.SETTINGS.tutorial_progress = {completed_parts = {}, hold_parts = {}}
-    end
-    if not G.SETTINGS.tutorial_complete then
-        G.SETTINGS.tutorial_complete = false
-    end"""
+    G.SETTINGS.tutorial_complete = true
+    G.SETTINGS.tutorial_progress = {
+        completed_parts = {
+            shop = true,
+            blind = true,
+            joker = true,
+            hand = true,
+            booster = true,
+            voucher = true,
+            interest = true,
+            discard = true,
+            play = true,
+        },
+        hold_parts = {}
+    }"""
 
 # Patch 2: Nil-guard the tutorial_progress access in Game:main_menu (line ~1480)
 [[patches]]
