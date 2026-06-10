@@ -598,12 +598,12 @@ priority = -1
 # The old approach tried to match 'function Game:main_menu(change_context)'
 # but that line has a trailing comment in v1.0.0i, causing the pattern to fail.
 
-# Patch 1: Initialize tutorial_progress before set_profile_progress() in Game:start_up()
+# Patch 1: Initialize tutorial_progress after set_profile_progress() in Game:start_up()
 [[patches]]
 [patches.pattern]
 target = "game.lua"
 pattern = "set_profile_progress()"
-position = "before"
+position = "after"
 match_indent = true
 payload = """
     -- [BalatroBot] Guard for fresh Wine prefix with no saved profile
