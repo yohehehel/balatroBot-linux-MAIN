@@ -2,6 +2,7 @@ import os
 import json
 import time
 import numpy as np
+import psutil
 from stable_baselines3.common.callbacks import BaseCallback
 
 class BalatroMetricsCallback(BaseCallback):
@@ -34,6 +35,8 @@ class BalatroMetricsCallback(BaseCallback):
         self._load_records()
         self._last_live_step = 0
         self._live_print_freq = 100  # print live speed every N steps
+        self._process = psutil.Process()  # current Python process
+        psutil.cpu_percent(interval=None)  # prime the non-blocking CPU measurement
 
     def _load_records(self):
         if os.path.exists(self.records_path):
@@ -111,9 +114,12 @@ class BalatroMetricsCallback(BaseCallback):
             live_fps = self.num_timesteps / elapsed if elapsed > 0 else 0.0
             total_steps = getattr(self.model, "total_timesteps", 0)
             percent = (self.num_timesteps / total_steps * 100) if isinstance(total_steps, (int, float)) and total_steps > 0 else 0.0
+            cpu = psutil.cpu_percent(interval=None)
+            ram = psutil.virtual_memory().percent
             print(
                 f"\r⏱  [{self.num_timesteps:>8}/{total_steps}] "
-                f"{percent:5.1f}%  |  ⚡ {live_fps:6.1f} steps/s",
+                f"{percent:5.1f}%  |  ⚡ {live_fps:6.1f} steps/s  "
+                f"|  🖥  CPU {cpu:4.1f}%  RAM {ram:4.1f}%",
                 end="", flush=True
             )
 
@@ -146,6 +152,12 @@ class BalatroMetricsCallback(BaseCallback):
         print("\n================== TRAINING MONITOR ==================")
         print(f"Progress:  {current_steps}/{total_steps} steps ({percent:.1f}%)")
         print(f"Speed:     {fps:.1f} steps/second")
+        # VM performance snapshot
+        cpu = psutil.cpu_percent(interval=None)
+        ram = psutil.virtual_memory()
+        proc_ram_mb = self._process.memory_info().rss / (1024 * 1024)
+        print(f"CPU:       {cpu:.1f}%")
+        print(f"RAM:       {ram.percent:.1f}%  ({ram.used // (1024**2)}/{ram.total // (1024**2)} MB)  [Python: {proc_ram_mb:.0f} MB]")
         print(f"Mean Reward (last 100 eps): {mean_reward:.2f}")
         
         if len(self.episode_wons) > 0:
