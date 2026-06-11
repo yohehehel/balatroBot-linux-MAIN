@@ -31,9 +31,9 @@ BOOSTER_STATES = {
 
 def get_action_space() -> spaces.MultiDiscrete:
     # 9 discrete dimensions:
-    # Dim 0: action type (0 to 5 for Phase 1: play, discard, select_blind, skip_blind, cash_out, next_round)
+    # Dim 0: action type (0-5 Phase 1 + 6-12 Phase 2 shop/booster)
     # Dim 1 to 8: binary selection of cards (0: off, 1: on)
-    return spaces.MultiDiscrete([6, 2, 2, 2, 2, 2, 2, 2, 2])
+    return spaces.MultiDiscrete([13, 2, 2, 2, 2, 2, 2, 2, 2])
 
 
 def _first_set_bit(card_mask: np.ndarray, max_idx: int = 7) -> int:
@@ -120,13 +120,13 @@ def decode_action(action: np.ndarray, game_state: GameState) -> Tuple[dict, bool
     elif state_name == "ROUND_EVAL":
         return {"action": "cash_out"}, True
     
-    # 4. SHOP State — Force next_round for Phase 1
+    # 4. SHOP State — Agent-driven (Phase 2)
     elif state_name == "SHOP":
-        return {"action": "next_round"}, True
+        return _decode_shop_action(action_type, card_mask, game_state)
     
-    # 5. BOOSTER PACK States — Force pack_skip for Phase 1
+    # 5. BOOSTER PACK States — Agent-driven (Phase 2)
     elif state_name in BOOSTER_STATES:
-        return {"action": "pack_skip"}, True
+        return _decode_booster_action(action_type, card_mask, game_state)
             
     # 6. Other / Menu / Game Over
     elif state_name == "MENU" or state_name == "GAME_OVER":

@@ -6,7 +6,7 @@ from src.game_state import GameState
 
 def test_action_space():
     space = get_action_space()
-    assert list(space.nvec) == [6, 2, 2, 2, 2, 2, 2, 2, 2], f"Unexpected: {space.nvec}"
+    assert list(space.nvec) == [13, 2, 2, 2, 2, 2, 2, 2, 2], f"Unexpected: {space.nvec}"
     print("✓ Action space correct")
 
 def test_observation_space():
@@ -24,11 +24,13 @@ def test_decode_shop_buy_card():
              "value": {}, "modifier": {}, "state": {}, "cost": {"buy": 4, "sell": 2}}
         ]}
     })
-    action = np.array([5, 1, 0, 0, 0, 0, 0, 0, 0])
+    # action_type=6 (BUY_CARD), card_mask bit 0 set -> buy index 0
+    action = np.array([6, 1, 0, 0, 0, 0, 0, 0, 0])
     result, valid = decode_action(action, state)
     assert valid
-    assert result["action"] == "next_round"
-    print("✓ Shop buy_card (force next_round) correct")
+    assert result["action"] == "buy_card"
+    assert result["index"] == 0
+    print("✓ Shop buy_card decode correct")
 
 def test_decode_shop_buy_card_no_money():
     state = GameState.from_dict({
@@ -38,22 +40,24 @@ def test_decode_shop_buy_card_no_money():
              "value": {}, "modifier": {}, "state": {}, "cost": {"buy": 4, "sell": 2}}
         ]}
     })
-    action = np.array([5, 1, 0, 0, 0, 0, 0, 0, 0])
+    # action_type=6 (BUY_CARD) but money (2) < cost (4) -> fallback next_round
+    action = np.array([6, 1, 0, 0, 0, 0, 0, 0, 0])
     result, valid = decode_action(action, state)
     assert valid
     assert result["action"] == "next_round"
-    print("✓ Shop buy_card fallback (force next_round) correct")
+    print("✓ Shop buy_card fallback to next_round when no money correct")
 
 def test_decode_shop_reroll():
     state = GameState.from_dict({
         "state": "SHOP", "money": 10,
         "round": {"reroll_cost": 5}
     })
-    action = np.array([5, 0, 0, 0, 0, 0, 0, 0, 0])
+    # action_type=9 (REROLL), money(10) >= reroll_cost(5) -> reroll
+    action = np.array([9, 0, 0, 0, 0, 0, 0, 0, 0])
     result, valid = decode_action(action, state)
     assert valid
-    assert result["action"] == "next_round"
-    print("✓ Shop reroll (force next_round) correct")
+    assert result["action"] == "reroll"
+    print("✓ Shop reroll decode correct")
 
 def test_decode_shop_sell_joker():
     state = GameState.from_dict({
@@ -65,11 +69,13 @@ def test_decode_shop_sell_joker():
              "value": {}, "modifier": {}, "state": {}, "cost": {"sell": 2}},
         ]}
     })
-    action = np.array([5, 0, 1, 0, 0, 0, 0, 0, 0])
+    # action_type=10 (SELL_JOKER), card_mask bit 1 set -> sell joker at index 1
+    action = np.array([10, 0, 1, 0, 0, 0, 0, 0, 0])
     result, valid = decode_action(action, state)
     assert valid
-    assert result["action"] == "next_round"
-    print("✓ Shop sell_joker (force next_round) correct")
+    assert result["action"] == "sell_joker"
+    assert result["index"] == 1
+    print("✓ Shop sell_joker decode correct")
 
 def test_decode_shop_next_round():
     state = GameState.from_dict({"state": "SHOP", "money": 0})
@@ -89,11 +95,13 @@ def test_decode_booster_select():
              "value": {}, "modifier": {}, "state": {}, "cost": {}},
         ]}
     })
-    action = np.array([5, 0, 1, 0, 0, 0, 0, 0, 0])
+    # action_type=11 (PACK_SELECT), card_mask bit 1 set -> select index 1
+    action = np.array([11, 0, 1, 0, 0, 0, 0, 0, 0])
     result, valid = decode_action(action, state)
     assert valid
-    assert result["action"] == "pack_skip"
-    print("✓ Booster pack_select (force pack_skip) correct")
+    assert result["action"] == "pack_select"
+    assert result["index"] == 1
+    print("✓ Booster pack_select decode correct")
 
 def test_decode_booster_skip():
     state = GameState.from_dict({
@@ -103,7 +111,8 @@ def test_decode_booster_skip():
              "value": {}, "modifier": {}, "state": {}, "cost": {}},
         ]}
     })
-    action = np.array([5, 0, 0, 0, 0, 0, 0, 0, 0])
+    # action_type=12 (PACK_SKIP) -> pack_skip
+    action = np.array([12, 0, 0, 0, 0, 0, 0, 0, 0])
     result, valid = decode_action(action, state)
     assert valid
     assert result["action"] == "pack_skip"

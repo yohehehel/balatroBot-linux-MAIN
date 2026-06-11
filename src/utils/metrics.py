@@ -32,6 +32,8 @@ class BalatroMetricsCallback(BaseCallback):
             "total_episodes": 0
         }
         self._load_records()
+        self._last_live_step = 0
+        self._live_print_freq = 100  # print live speed every N steps
 
     def _load_records(self):
         if os.path.exists(self.records_path):
@@ -101,6 +103,19 @@ class BalatroMetricsCallback(BaseCallback):
                 self.last_saved_path = new_save_path
             except Exception as e:
                 print(f"[Saver] Error saving checkpoint: {e}")
+
+        # Live steps/sec display (printed every _live_print_freq steps on the same line)
+        if self.num_timesteps - self._last_live_step >= self._live_print_freq:
+            self._last_live_step = self.num_timesteps
+            elapsed = time.time() - self.start_time
+            live_fps = self.num_timesteps / elapsed if elapsed > 0 else 0.0
+            total_steps = getattr(self.model, "total_timesteps", 0)
+            percent = (self.num_timesteps / total_steps * 100) if isinstance(total_steps, (int, float)) and total_steps > 0 else 0.0
+            print(
+                f"\r⏱  [{self.num_timesteps:>8}/{total_steps}] "
+                f"{percent:5.1f}%  |  ⚡ {live_fps:6.1f} steps/s",
+                end="", flush=True
+            )
 
         return True
 

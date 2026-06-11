@@ -10,7 +10,7 @@ class TrainingConfig:
     n_epochs: int = 10
     gamma: float = 0.99
     clip_range: float = 0.2
-    ent_coef: float = 0.01
+    ent_coef: float = 0.02
     
     # Network Architecture
     policy_kwargs: dict = field(default_factory=lambda: dict(net_arch=dict(pi=[512, 512], vf=[512, 512])))

@@ -8,7 +8,7 @@ def test_training_config_defaults():
     assert config.learning_rate == 3e-4
     assert config.n_steps == 4096
     assert config.batch_size == 256
-    assert config.ent_coef == 0.01
+    assert config.ent_coef == 0.02
     assert config.device == "auto"
 
 def test_training_config_to_ppo_kwargs():

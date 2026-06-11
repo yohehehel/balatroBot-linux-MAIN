@@ -300,19 +300,19 @@ class BalatroEnv(gym.Env):
         # money_delta = float(new_state.money) - float(old_state.money)
         # reward += 0.05 * money_delta
 
-        # 5. Interest threshold bonus — (Disabled for Phase 1)
-        # if (old_state.state in ("ROUND_EVAL", "SELECTING_HAND") and 
-        #     new_state.state in ("SHOP", "BLIND_SELECT")):
-        #     interest = min(int(new_state.money) // 5, 5)
-        #     if interest > 0:
-        #         reward += 0.3 * interest  # max +1.5 for maintaining $25+
+        # 5. Interest threshold bonus
+        if (old_state.state in ("ROUND_EVAL", "SELECTING_HAND") and 
+            new_state.state in ("SHOP", "BLIND_SELECT")):
+            interest = min(int(new_state.money) // 5, 5)
+            if interest > 0:
+                reward += 0.3 * interest  # max +1.5 for maintaining $25+
         
-        # 6. Joker acquisition — (Disabled for Phase 1)
-        # old_joker_count = len(old_state.jokers.cards) if old_state.jokers else 0
-        # new_joker_count = len(new_state.jokers.cards) if new_state.jokers else 0
-        # if new_joker_count > old_joker_count:
-        #     reward += 0.5 * (new_joker_count - old_joker_count)
-        #     logger.debug(f"Joker acquired! {old_joker_count} -> {new_joker_count}")
+        # 6. Joker acquisition
+        old_joker_count = len(old_state.jokers.cards) if old_state.jokers else 0
+        new_joker_count = len(new_state.jokers.cards) if new_state.jokers else 0
+        if new_joker_count > old_joker_count:
+            reward += 0.5 * (new_joker_count - old_joker_count)
+            logger.debug(f"Joker acquired! {old_joker_count} -> {new_joker_count}")
 
         # 7. Game end conditions
         if new_state.state == "GAME_OVER":
