@@ -193,7 +193,20 @@ class BalatroEnv(gym.Env):
                 reward = -0.5
                 try:
                     new_state = self.client.gamestate()
-                    logger.info(f"State successfully recovered after connection error. New state: {new_state.state}")
+                    # Escape hatch: if cash_out timed out and game is still stuck in ROUND_EVAL,
+                    # calling cash_out again will block forever. Force-return to menu instead.
+                    if action_type == "cash_out" and new_state.state == "ROUND_EVAL":
+                        logger.warning(
+                            f"[env:{self._env_id}] Stuck in ROUND_EVAL after cash_out timeout. "
+                            f"Forcing menu() escape to unblock instance..."
+                        )
+                        try:
+                            new_state = self.client.menu()
+                            logger.info(f"[env:{self._env_id}] Menu escape successful. New state: {new_state.state}")
+                        except Exception as menu_err:
+                            logger.error(f"[env:{self._env_id}] Menu escape also failed: {menu_err}")
+                    else:
+                        logger.info(f"State successfully recovered after connection error. New state: {new_state.state}")
                 except Exception as recovery_err:
                     logger.error(f"Failed to recover state: {recovery_err}")
                     new_state = state
