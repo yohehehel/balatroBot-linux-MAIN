@@ -214,7 +214,7 @@ def dump_instance_logs(port, original_balatro_dir, lines_count=40):
 
     # 3. Lovely logs inside the Wine prefix (for Linux)
     if sys.platform == "linux":
-        wineprefix_dir = Path(f"/tmp/wine_env_{port}")
+        wineprefix_dir = Path(f"/dev/shm/wine_env_{port}")
         temp_balatro_dir = find_balatro_appdata(wineprefix_dir)
         if temp_balatro_dir:
             lovely_log_dir = temp_balatro_dir / "Mods" / "lovely" / "log"
@@ -317,7 +317,7 @@ def main():
                 sys.exit(1)
             
         # Initialize master WINEPREFIX template once to avoid slow sequential wineboots
-        master_prefix_dir = Path("/tmp/wine_master")
+        master_prefix_dir = Path("/dev/shm/wine_master")
         if not (master_prefix_dir / "drive_c" / "users").exists():
             print("Initializing master WINEPREFIX template...")
             master_prefix_dir.mkdir(parents=True, exist_ok=True)
@@ -370,7 +370,7 @@ def main():
         
         if sys.platform == "linux":
             # Isolate via WINEPREFIX on Linux
-            wineprefix_dir = f"/tmp/wine_env_{port}"
+            wineprefix_dir = f"/dev/shm/wine_env_{port}"
             if os.path.exists(wineprefix_dir):
                 import shutil
                 try:

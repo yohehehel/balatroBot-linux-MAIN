@@ -300,8 +300,8 @@ def stop_xvfb(xvfb_proc):
 def test_debug_instance():
     print("\n--- [3/6] Starting Debug isolated Instance ---")
     port = 12350
-    wineprefix_dir = Path("/tmp/wine_diag")
-    master_prefix_dir = Path("/tmp/wine_master")
+    wineprefix_dir = Path("/dev/shm/wine_diag")
+    master_prefix_dir = Path("/dev/shm/wine_master")
     
     # Start Xvfb if not running on display :99
     xvfb_proc = None
@@ -336,7 +336,7 @@ def test_debug_instance():
         
     # 2. Clone prefix from master if exists, otherwise initialize fresh prefix
     if master_prefix_dir.exists():
-        print(f"  Cloning WINEPREFIX from template /tmp/wine_master...")
+        print(f"  Cloning WINEPREFIX from template /dev/shm/wine_master...")
         shutil.copytree(master_prefix_dir, wineprefix_dir, symlinks=True)
     else:
         print(f"  Master prefix template NOT found. Initializing fresh WINEPREFIX at {wineprefix_dir}...")

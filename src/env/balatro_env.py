@@ -113,7 +113,7 @@ class BalatroEnv(gym.Env):
         # 1. Kill existing process
         if sys.platform == "linux":
             # Kill all Wine processes in this isolated wine prefix
-            prefix_dir = f"/tmp/wine_env_{self._env_id}"
+            prefix_dir = f"/dev/shm/wine_env_{self._env_id}"
             env = os.environ.copy()
             env["WINEPREFIX"] = prefix_dir
             env["WINEDEBUG"] = "-all"
@@ -155,7 +155,7 @@ class BalatroEnv(gym.Env):
         env["BALATROBOT_RENDER_ON_API"] = "0"
         
         if sys.platform == "linux":
-            prefix_dir = f"/tmp/wine_env_{self._env_id}"
+            prefix_dir = f"/dev/shm/wine_env_{self._env_id}"
             env["WINEPREFIX"] = prefix_dir
             env["WINEDLLOVERRIDES"] = "version=n,b"
             env["WINEDEBUG"] = "-all"
@@ -348,7 +348,6 @@ class BalatroEnv(gym.Env):
                     
                     try:
                         new_state = self.client.gamestate(timeout=3.0)
-                        self._consecutive_timeout_errors = 0
                         if action_type == "cash_out" and new_state.state == "ROUND_EVAL":
                             logger.error(
                                 f"[env:{self._env_id}] Stuck in ROUND_EVAL after cash_out timeout. "

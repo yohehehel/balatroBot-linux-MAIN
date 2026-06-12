@@ -187,7 +187,7 @@ def main():
                 sys.exit(1)
             
         # Initialize master WINEPREFIX template once to avoid slow sequential wineboots
-        master_prefix_dir = Path("/tmp/wine_master")
+        master_prefix_dir = Path("/dev/shm/wine_master")
         if not (master_prefix_dir / "drive_c" / "users").exists():
             print("Initializing master WINEPREFIX template...")
             master_prefix_dir.mkdir(parents=True, exist_ok=True)
@@ -224,7 +224,7 @@ def main():
         
         if sys.platform == "linux":
             # Isolate via WINEPREFIX on Linux
-            wineprefix_dir = f"/tmp/wine_env_{port}"
+            wineprefix_dir = f"/dev/shm/wine_env_{port}"
             if os.path.exists(wineprefix_dir):
                 try:
                     shutil.rmtree(wineprefix_dir)
