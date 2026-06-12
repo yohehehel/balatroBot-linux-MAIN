@@ -639,6 +639,34 @@ if add_round_eval_row then
     return original_add_round_eval_row(config)
   end
 end
+
+-- Global nil-guard for G.round_eval to prevent event queue crashes outside ROUND_EVAL state
+if G then
+  local G_mt = getmetatable(G) or {}
+  local original_G_index = G_mt.__index
+  G_mt.__index = function(t, k)
+    if k == "round_eval" and G.STATE ~= G.STATES.ROUND_EVAL then
+      return rawget(t, k) or setmetatable({
+        alignment = { offset = {} },
+        remove = function() end
+      }, {
+        __index = function(t2, k2)
+          return setmetatable({}, {
+            __index = function() return function() end end,
+            __call = function() end
+          })
+        end
+      })
+    end
+    if type(original_G_index) == "function" then
+      return original_G_index(t, k)
+    elseif type(original_G_index) == "table" then
+      return original_G_index[k]
+    end
+    return rawget(t, k)
+  end
+  setmetatable(G, G_mt)
+end
 """
             if "Bypassing unlock overlay popup" not in content:
                 content = content + bypass_code
