@@ -167,6 +167,10 @@ end
 -- Hook into love.update to force gamespeed at every frame
 local original_love_update = love.update
 love.update = function(dt)
+  -- Cap dt to prevent NaN crashes: if the game was frozen (e.g. during cash_out timeout),
+  -- dt can spike to 8s+. At GAMESPEED=100 this creates values that overflow into NaN in
+  -- Lua for-loop control variables, crashing the process. 0.1s = ~6 frames at 60fps.
+  dt = math.min(dt, 0.1)
   if G and G.SETTINGS then
     G.SETTINGS.gamespeed = 100.0
     G.SETTINGS.GAMESPEED = 100.0
