@@ -179,6 +179,78 @@ class BalatroEnv(gym.Env):
         except Exception as launch_err:
             logger.error(f"[env:{self._env_id}] Failed to relaunch Balatro: {launch_err}")
 
+    def _log_diagnostics(self):
+        import os
+        import sys
+        from pathlib import Path
+        
+        # Resolve original_balatro_dir
+        if sys.platform == "linux":
+            wineprefix = os.environ.get("WINEPREFIX", os.path.expanduser("~/.wine"))
+            
+            def find_appdata(prefix_path):
+                users_dir = Path(prefix_path) / "drive_c" / "users"
+                if not users_dir.exists():
+                    return None
+                for p in users_dir.iterdir():
+                    if p.is_dir() and p.name not in (".", ".."):
+                        appdata_roaming = p / "AppData" / "Roaming" / "Balatro"
+                        if appdata_roaming.exists():
+                            return appdata_roaming
+                        appdata_alt = p / "Application Data" / "Balatro"
+                        if appdata_alt.exists():
+                            return appdata_alt
+                return None
+
+            original_balatro_dir = find_appdata(wineprefix)
+            if not original_balatro_dir:
+                logger.error(f"[env:{self._env_id}] Diagnostic: original_balatro_dir not found in {wineprefix}")
+                return
+
+            logger.error(f"[env:{self._env_id}] --- DIAGNOSTIC LOG DUMP ON TIMEOUT/ERROR ---")
+            
+            # Read stdout log
+            stdout_log = original_balatro_dir / f"instance_{self._env_id}_stdout.log"
+            if stdout_log.exists():
+                try:
+                    with open(stdout_log, "r", encoding="utf-8", errors="ignore") as f:
+                        lines = f.readlines()
+                    logger.error(f"[env:{self._env_id}] Last 10 lines of stdout:")
+                    for l in lines[-10:]:
+                        logger.error(f"  stdout: {l.strip()}")
+                except Exception as e:
+                    logger.error(f"[env:{self._env_id}] Failed to read stdout log: {e}")
+
+            # Read stderr log
+            stderr_log = original_balatro_dir / f"instance_{self._env_id}_stderr.log"
+            if stderr_log.exists():
+                try:
+                    with open(stderr_log, "r", encoding="utf-8", errors="ignore") as f:
+                        lines = f.readlines()
+                    logger.error(f"[env:{self._env_id}] Last 10 lines of stderr:")
+                    for l in lines[-10:]:
+                        logger.error(f"  stderr: {l.strip()}")
+                except Exception as e:
+                    logger.error(f"[env:{self._env_id}] Failed to read stderr log: {e}")
+
+            # Read Lovely log
+            wineprefix_dir = Path(f"/dev/shm/wine_env_{self._env_id}")
+            temp_balatro_dir = find_appdata(wineprefix_dir)
+            if temp_balatro_dir:
+                lovely_log_dir = temp_balatro_dir / "Mods" / "lovely" / "log"
+                if lovely_log_dir.exists():
+                    log_files = list(lovely_log_dir.glob("lovely-*.log"))
+                    if log_files:
+                        newest_log = max(log_files, key=os.path.getmtime)
+                        try:
+                            with open(newest_log, "r", encoding="utf-8", errors="ignore") as f:
+                                lines = f.readlines()
+                            logger.error(f"[env:{self._env_id}] Last 25 lines of Lovely log ({newest_log.name}):")
+                            for l in lines[-25:]:
+                                logger.error(f"  lovely: {l.strip()}")
+                        except Exception as e:
+                            logger.error(f"[env:{self._env_id}] Failed to read Lovely log: {e}")
+
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[Dict[str, np.ndarray], dict]:
         super().reset(seed=seed)
         self.invalid_actions_in_a_row = 0
@@ -288,6 +360,13 @@ class BalatroEnv(gym.Env):
                     new_state = state
             except Exception as e:
                 logger.error(f"Unexpected connection error during step execution: {e}. Attempting to recover state...")
+                
+                # Log diagnostic logs immediately to pinpoint the cause
+                try:
+                    self._log_diagnostics()
+                except Exception as diag_err:
+                    logger.error(f"Failed to run diagnostic logger: {diag_err}")
+                    
                 reward = -0.5
                 err_str = str(e).lower()
                 is_conn_refused = "connection refused" in err_str or "errno 111" in err_str
