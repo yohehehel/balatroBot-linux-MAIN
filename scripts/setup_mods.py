@@ -567,16 +567,20 @@ love.update = function(dt)
   original_love_update(dt)
 end
 
--- Hook EventManager:update to multiply delta time by 10x for resolving animations instantly
+-- Hook EventManager:update to cap delta time and prevent NaN in event timer calculations.
+-- NOTE: settings.lua already provides a boosted dt (49.9/60 ≈ 0.831s/frame, ~50x real-time).
+-- Adding a 10x multiplier here pushes EventManager dt to 8.31s/frame, which causes NaN
+-- in Lua for-loop control variables when event timer arithmetic overflows. Pass dt as-is
+-- with a 0.5s safety cap to keep animations fast without triggering numeric instability.
 if EventManager then
   local old_event_update = EventManager.update
   local event_manager_logged = false
   EventManager.update = function(self, dt, forced)
     if not event_manager_logged then
-      sendInfoMessage("[DIAGNOSTIC] EventManager.update 10x speed multiplier active", "BB.MOD")
+      sendInfoMessage("[DIAGNOSTIC] EventManager.update dt-cap active (no 10x multiplier)", "BB.MOD")
       event_manager_logged = true
     end
-    return old_event_update(self, dt * 10.0, forced)
+    return old_event_update(self, math.min(dt, 0.5), forced)
   end
 end
 """
