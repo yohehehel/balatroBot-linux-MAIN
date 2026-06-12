@@ -17,6 +17,7 @@ MAX_SHOP_ACTIONS = 20
 # After this many consecutive Connection-refused errors, the instance is considered
 # permanently dead (Wine process crashed). Truncate the episode so SB3 can move on.
 MAX_DEAD_STEPS = 5
+MAX_TIMEOUT_STEPS = 3
 
 
 class BalatroEnv(gym.Env):
@@ -45,6 +46,7 @@ class BalatroEnv(gym.Env):
         # Dead-instance detection: counts consecutive steps that got Connection refused.
         # When it reaches MAX_DEAD_STEPS the episode is truncated so SB3 doesn't spin forever.
         self._consecutive_conn_errors = 0
+        self._consecutive_timeout_errors = 0
 
     def _auto_skip_boosters(self, state: GameState) -> GameState:
         """Fallback: automatically skip booster pack selection if the agent
@@ -105,6 +107,7 @@ class BalatroEnv(gym.Env):
         self._step_count = 0
         self._shop_actions_taken = 0
         self._consecutive_conn_errors = 0
+        self._consecutive_timeout_errors = 0
         
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
@@ -184,28 +187,32 @@ class BalatroEnv(gym.Env):
             if action_type == "next_round" and state.state == "SHOP":
                 self._shop_actions_taken = 0
             
-            # Execute action
             try:
                 new_state = self._execute_action(action_type, action_dict, state)
-                # Successful API call: reset dead-instance counter
+                # Successful API call: reset dead-instance counters
                 self._consecutive_conn_errors = 0
+                self._consecutive_timeout_errors = 0
             except BalatroAPIError as e:
                 logger.error(f"API Error during step execution: {e}. Attempting to recover state...")
                 reward = -0.5
                 try:
                     new_state = self.client.gamestate()
                     logger.info(f"State successfully recovered. New state: {new_state.state}")
+                    self._consecutive_conn_errors = 0
+                    self._consecutive_timeout_errors = 0
                 except Exception as recovery_err:
                     logger.error(f"Failed to recover state: {recovery_err}")
                     new_state = state
             except Exception as e:
                 logger.error(f"Unexpected connection error during step execution: {e}. Attempting to recover state...")
                 reward = -0.5
-                # Detect Connection refused — signature of a permanently dead Wine process.
                 err_str = str(e).lower()
                 is_conn_refused = "connection refused" in err_str or "errno 111" in err_str
+                is_timeout = "timed out" in err_str or "timeout" in err_str
+                
                 if is_conn_refused:
                     self._consecutive_conn_errors += 1
+                    self._consecutive_timeout_errors = 0
                     logger.error(
                         f"[env:{self._env_id}] Connection refused "
                         f"({self._consecutive_conn_errors}/{MAX_DEAD_STEPS}). "
@@ -229,14 +236,56 @@ class BalatroEnv(gym.Env):
                             }
                         }
                         return obs, -5.0, False, True, info
-                    # Don't bother trying to recover — it'll just get another refused
                     new_state = state
-                else:
+                elif is_timeout:
+                    self._consecutive_timeout_errors += 1
                     self._consecutive_conn_errors = 0
+                    logger.error(
+                        f"[env:{self._env_id}] Timeout error during execution "
+                        f"({self._consecutive_timeout_errors}/{MAX_TIMEOUT_STEPS})."
+                    )
+                    if self._consecutive_timeout_errors >= MAX_TIMEOUT_STEPS:
+                        logger.error(
+                            f"[env:{self._env_id}] Instance declared DEAD after "
+                            f"{MAX_TIMEOUT_STEPS} consecutive timeouts. "
+                            f"Truncating episode to unblock training."
+                        )
+                        self.current_state = state  # keep last known state
+                        obs = encode_observation(state)
+                        info = {
+                            "episode_metrics": {
+                                "won": False,
+                                "ante": int(state.ante_num),
+                                "round": int(state.round_num),
+                                "money": float(state.money),
+                                "chips": float(state.round.chips) if state.round else 0.0,
+                            }
+                        }
+                        return obs, -5.0, False, True, info
+                    
                     try:
                         new_state = self.client.gamestate()
-                        # Escape hatch: if cash_out timed out and game is still stuck in ROUND_EVAL,
-                        # calling cash_out again will block forever. Force-return to menu instead.
+                        self._consecutive_timeout_errors = 0
+                        if action_type == "cash_out" and new_state.state == "ROUND_EVAL":
+                            logger.error(
+                                f"[env:{self._env_id}] Stuck in ROUND_EVAL after cash_out timeout. "
+                                f"Forcing menu() escape to unblock instance..."
+                            )
+                            try:
+                                new_state = self.client.menu()
+                                logger.info(f"[env:{self._env_id}] Menu escape successful. New state: {new_state.state}")
+                            except Exception as menu_err:
+                                logger.error(f"[env:{self._env_id}] Menu escape also failed: {menu_err}")
+                        else:
+                            logger.info(f"State successfully recovered after timeout error. New state: {new_state.state}")
+                    except Exception as recovery_err:
+                        logger.error(f"Failed to recover state: {recovery_err}")
+                        new_state = state
+                else:
+                    self._consecutive_conn_errors = 0
+                    self._consecutive_timeout_errors = 0
+                    try:
+                        new_state = self.client.gamestate()
                         if action_type == "cash_out" and new_state.state == "ROUND_EVAL":
                             logger.error(
                                 f"[env:{self._env_id}] Stuck in ROUND_EVAL after cash_out timeout. "

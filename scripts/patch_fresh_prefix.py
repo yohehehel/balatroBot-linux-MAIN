@@ -176,6 +176,19 @@ love.update = function(dt)
     G.SETTINGS.GAMESPEED = 100.0
   end
   
+  -- Guard against G.round_eval being nil when game state is ROUND_EVAL
+  if G and G.STATE == G.STATES.ROUND_EVAL and not G.round_eval then
+    sendInfoMessage("G.round_eval is nil during ROUND_EVAL state, creating dummy to prevent game crash", "BB.MOD")
+    G.round_eval = setmetatable({
+      alignment = { offset = {} },
+      remove = function() end
+    }, {
+      __index = function(t, k)
+        return function() end
+      end
+    })
+  end
+  
   -- Periodically clear unlock queues and unlock controller if stuck
   if G and G.E_MANAGER and G.E_MANAGER.queues and G.E_MANAGER.queues.unlock and #G.E_MANAGER.queues.unlock > 0 then
     sendInfoMessage("Active unlock queue detected during update (size: " .. #G.E_MANAGER.queues.unlock .. "). Clearing and unlocking...", "BB.MOD")
