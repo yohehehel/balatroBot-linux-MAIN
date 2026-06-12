@@ -233,6 +233,18 @@ if EventManager then
     end
   end
 end
+
+-- Nil-guard for add_round_eval_row to prevent crashes when G.round_eval is destroyed/nil
+if add_round_eval_row then
+  local original_add_round_eval_row = add_round_eval_row
+  add_round_eval_row = function(config)
+    if not G or not G.round_eval then
+      sendInfoMessage("Bypassing add_round_eval_row: G.round_eval is nil", "BB.MOD")
+      return
+    end
+    return original_add_round_eval_row(config)
+  end
+end
 """
         if "Bypassing unlock overlay popup" not in content:
             content = content + bypass_code
