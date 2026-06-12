@@ -567,20 +567,47 @@ love.update = function(dt)
   original_love_update(dt)
 end
 
--- Hook EventManager:update to cap delta time and prevent NaN in event timer calculations.
--- NOTE: settings.lua already provides a boosted dt (49.9/60 ≈ 0.831s/frame, ~50x real-time).
--- Adding a 10x multiplier here pushes EventManager dt to 8.31s/frame, which causes NaN
--- in Lua for-loop control variables when event timer arithmetic overflows. Pass dt as-is
--- with a 0.5s safety cap to keep animations fast without triggering numeric instability.
+-- Hook EventManager:update with a pcall guard to prevent NaN-induced Lua crashes.
+-- Root cause: under the speed hack, certain event callback calculations produce NaN values
+-- that get stored as table keys in self.queues. When pairs() iterates and hits a NaN key,
+-- (for control)=nan triggers a Lua crash regardless of dt magnitude.
+-- On error: rebuild queues with ipairs (skips non-integer/NaN keys) to drop corrupt entries,
+-- then unfreeze the game controller so the bot can continue.
 if EventManager then
   local old_event_update = EventManager.update
   local event_manager_logged = false
   EventManager.update = function(self, dt, forced)
     if not event_manager_logged then
-      sendInfoMessage("[DIAGNOSTIC] EventManager.update dt-cap active (no 10x multiplier)", "BB.MOD")
+      sendInfoMessage("[DIAGNOSTIC] EventManager.update pcall guard active", "BB.MOD")
       event_manager_logged = true
     end
-    return old_event_update(self, math.min(dt, 0.5), forced)
+    local safe_dt = math.min(dt, 0.5)
+    local ok, err = pcall(old_event_update, self, safe_dt, forced)
+    if not ok then
+      sendInfoMessage("[WARN] EventManager NaN crash caught: " .. tostring(err) .. " — sanitizing queues", "BB.MOD")
+      -- Rebuild each queue using ipairs: only sequential integer keys survive,
+      -- which drops any NaN-keyed entries that triggered the crash.
+      if self and self.queues then
+        local new_queues = {}
+        for queue_name, queue in pairs(self.queues) do
+          if type(queue_name) == "string" then
+            local clean = {}
+            local n = 0
+            for _, ev in ipairs(queue) do
+              n = n + 1
+              clean[n] = ev
+            end
+            new_queues[queue_name] = clean
+          end
+        end
+        self.queues = new_queues
+      end
+      -- Unfreeze game state so the bot can send the next API call
+      if G then
+        if G.CONTROLLER then G.CONTROLLER.locked = false end
+        if G.SETTINGS then G.SETTINGS.paused = false end
+      end
+    end
   end
 end
 """
