@@ -17,7 +17,7 @@ MAX_SHOP_ACTIONS = 20
 # After this many consecutive Connection-refused errors, the instance is considered
 # permanently dead (Wine process crashed). Truncate the episode so SB3 can move on.
 MAX_DEAD_STEPS = 5
-MAX_TIMEOUT_STEPS = 3
+MAX_TIMEOUT_STEPS = 2
 
 
 class BalatroEnv(gym.Env):
@@ -101,6 +101,84 @@ class BalatroEnv(gym.Env):
                 break
         return state
 
+    def _restart_balatro_process(self):
+        import subprocess
+        import sys
+        import os
+        import time
+        from pathlib import Path
+
+        logger.warning(f"[env:{self._env_id}] Killing and restarting Balatro instance on port {self._env_id}...")
+        
+        # 1. Kill existing process
+        if sys.platform == "linux":
+            # Kill all Wine processes in this isolated wine prefix
+            prefix_dir = f"/tmp/wine_env_{self._env_id}"
+            env = os.environ.copy()
+            env["WINEPREFIX"] = prefix_dir
+            env["WINEDEBUG"] = "-all"
+            logger.info(f"[env:{self._env_id}] Running wineserver -k for prefix {prefix_dir}")
+            subprocess.run(["wineserver", "-k"], env=env, capture_output=True)
+            # Also pkill any lingering Balatro.exe processes specifically associated with this prefix/port
+            subprocess.run(["pkill", "-f", f"wine.*Balatro.exe.*{self._env_id}"], capture_output=True)
+        elif sys.platform == "win32":
+            subprocess.run(["taskkill", "/f", "/im", "Balatro.exe"], capture_output=True)
+            
+        time.sleep(1.0)
+        
+        # 2. Relaunch process
+        # Find repo root and Balatro.exe
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        balatro_exe = repo_root / "Balatro.v1.0.0i" / "Balatro.exe"
+        if not balatro_exe.exists():
+            logger.error(f"[env:{self._env_id}] Balatro.exe not found at {balatro_exe}")
+            return
+            
+        # Reconstruct env
+        env = os.environ.copy()
+        env["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
+        env["GALLIUM_DRIVER"] = "llvmpipe"
+        
+        # Prevent inheriting PyTorch's 1-thread limit
+        for thread_env in ["OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"]:
+            if thread_env in env:
+                del env[thread_env]
+                
+        env["BALATROBOT_HOST"] = "127.0.0.1"
+        env["BALATROBOT_PORT"] = str(self._env_id)
+        env["BALATROBOT_FAST"] = "1"
+        env["BALATROBOT_GAMESPEED"] = "100000"
+        env["BALATROBOT_ANIMATION_FPS"] = "100000"
+        env["BALATROBOT_FPS_CAP"] = "250"
+        env["BALATROBOT_NO_SHADERS"] = "1"
+        env["BALATROBOT_HEADLESS"] = "1"
+        env["BALATROBOT_RENDER_ON_API"] = "0"
+        
+        if sys.platform == "linux":
+            prefix_dir = f"/tmp/wine_env_{self._env_id}"
+            env["WINEPREFIX"] = prefix_dir
+            env["WINEDLLOVERRIDES"] = "version=n,b"
+            env["WINEDEBUG"] = "-all"
+            env["ALSOFT_DRIVERS"] = "null"
+            env["SDL_AUDIODRIVER"] = "dummy"
+            env["DISPLAY"] = ":99"
+            cmd_launch = ["wine", str(balatro_exe)]
+        else:
+            cmd_launch = [str(balatro_exe)]
+            
+        logger.info(f"[env:{self._env_id}] Launching Balatro with command: {cmd_launch}")
+        try:
+            subprocess.Popen(
+                cmd_launch,
+                cwd=str(balatro_exe.parent),
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            logger.info(f"[env:{self._env_id}] Relaunch command spawned successfully.")
+        except Exception as launch_err:
+            logger.error(f"[env:{self._env_id}] Failed to relaunch Balatro: {launch_err}")
+
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[Dict[str, np.ndarray], dict]:
         super().reset(seed=seed)
         self.invalid_actions_in_a_row = 0
@@ -113,7 +191,7 @@ class BalatroEnv(gym.Env):
         for attempt in range(1, max_attempts + 1):
             try:
                 logger.info(f"Resetting Balatro environment (attempt {attempt}/{max_attempts})...")
-                state = self.client.gamestate()
+                state = self.client.gamestate(timeout=5.0)
                 
                 # If not in main menu, return to menu first to ensure a clean start
                 if state.state != "MENU":
@@ -140,7 +218,12 @@ class BalatroEnv(gym.Env):
                 if attempt == max_attempts:
                     logger.error("All reset attempts failed.")
                     raise e
-                time.sleep(2.0)
+                # Attempt to restart the Balatro process
+                try:
+                    self._restart_balatro_process()
+                except Exception as restart_err:
+                    logger.error(f"Failed to run restart routine: {restart_err}")
+                time.sleep(5.0)
 
     def step(self, action: np.ndarray) -> Tuple[Dict[str, np.ndarray], float, bool, bool, dict]:
         if self.current_state is None:
@@ -196,7 +279,7 @@ class BalatroEnv(gym.Env):
                 logger.error(f"API Error during step execution: {e}. Attempting to recover state...")
                 reward = -0.5
                 try:
-                    new_state = self.client.gamestate()
+                    new_state = self.client.gamestate(timeout=3.0)
                     logger.info(f"State successfully recovered. New state: {new_state.state}")
                     self._consecutive_conn_errors = 0
                     self._consecutive_timeout_errors = 0
@@ -264,7 +347,7 @@ class BalatroEnv(gym.Env):
                         return obs, -5.0, False, True, info
                     
                     try:
-                        new_state = self.client.gamestate()
+                        new_state = self.client.gamestate(timeout=3.0)
                         self._consecutive_timeout_errors = 0
                         if action_type == "cash_out" and new_state.state == "ROUND_EVAL":
                             logger.error(
@@ -285,7 +368,7 @@ class BalatroEnv(gym.Env):
                     self._consecutive_conn_errors = 0
                     self._consecutive_timeout_errors = 0
                     try:
-                        new_state = self.client.gamestate()
+                        new_state = self.client.gamestate(timeout=3.0)
                         if action_type == "cash_out" and new_state.state == "ROUND_EVAL":
                             logger.error(
                                 f"[env:{self._env_id}] Stuck in ROUND_EVAL after cash_out timeout. "

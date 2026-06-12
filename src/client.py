@@ -31,7 +31,7 @@ class BalatroClient:
         )
         self._request_id = 1
 
-    def _call(self, method: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    def _call(self, method: str, params: Optional[Dict[str, Any]] = None, timeout: Optional[float] = None) -> Any:
         payload = {
             "jsonrpc": "2.0",
             "method": method,
@@ -42,7 +42,8 @@ class BalatroClient:
         
         try:
             logger.debug(f"Calling JSON-RPC method {method} with params {params}")
-            response = self.client.post("/", json=payload)
+            to = timeout if timeout is not None else self.timeout
+            response = self.client.post("/", json=payload, timeout=to)
             response.raise_for_status()
             res_json = response.json()
         except httpx.RequestError as e:
@@ -63,9 +64,9 @@ class BalatroClient:
         """Perform health check on the API."""
         return self._call("health")
 
-    def gamestate(self) -> GameState:
+    def gamestate(self, timeout: Optional[float] = None) -> GameState:
         """Fetch the current game state."""
-        res = self._call("gamestate")
+        res = self._call("gamestate", timeout=timeout)
         return GameState.from_dict(res)
 
     def start(self, deck: str = "RED", stake: str = "WHITE", seed: Optional[str] = None) -> GameState:
