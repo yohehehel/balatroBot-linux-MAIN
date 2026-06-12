@@ -304,7 +304,7 @@ def setup_balatrobot_mod():
             
             # Replace configure_love_update delta time
             old_update = 'local dt = BB_SETTINGS.headless and (4.99 / 60.0) or (1.0 / 60.0)'
-            new_update = 'local dt = BB_SETTINGS.headless and (49.9 / 60.0) or (10.0 / 60.0) -- 10x Speed Hack'
+            new_update = 'local dt = BB_SETTINGS.headless and (4.99 / 60.0) or (1.0 / 60.0) -- 10x Speed Hack'
             content = content.replace(old_update, new_update)
             
             # Replace configure_fast to support G.SETTINGS.GAMESPEED = 100.0 and FPS throttling
@@ -318,9 +318,9 @@ end""".replace('\r\n', '\n')
             new_fast = """local function configure_fast()
   -- performance
   G.FPS_CAP = BB_SETTINGS.fps_cap or 250 -- VSync throttling
-  G.SETTINGS.GAMESPEED = 100.0 -- 100x speed hack
-  G.SETTINGS.gamespeed = 100.0
-  G.ANIMATION_FPS = 600
+  G.SETTINGS.GAMESPEED = 10.0 -- 10x speed hack
+  G.SETTINGS.gamespeed = 10.0
+  G.ANIMATION_FPS = 60
   G.F_VERBOSE = false
 end""".replace('\r\n', '\n')
             content = content.replace(old_fast, new_fast)
@@ -497,8 +497,8 @@ love.update = function(dt)
   -- Lua for-loop control variables, crashing the process. 0.1s = ~6 frames at 60fps.
   dt = math.min(dt, 0.1)
   if G and G.SETTINGS then
-    G.SETTINGS.gamespeed = 100.0
-    G.SETTINGS.GAMESPEED = 100.0
+    G.SETTINGS.gamespeed = 10.0
+    G.SETTINGS.GAMESPEED = 10.0
   end
   
   -- Guard against G.round_eval being nil when game state is ROUND_EVAL

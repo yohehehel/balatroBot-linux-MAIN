@@ -423,8 +423,8 @@ def test_debug_instance():
     env["BALATROBOT_HOST"] = "127.0.0.1"
     env["BALATROBOT_PORT"] = str(port)
     env["BALATROBOT_FAST"] = "1"
-    env["BALATROBOT_GAMESPEED"] = "100"
-    env["BALATROBOT_ANIMATION_FPS"] = "600"
+    env["BALATROBOT_GAMESPEED"] = "10"
+    env["BALATROBOT_ANIMATION_FPS"] = "60"
     env["BALATROBOT_FPS_CAP"] = "250"
     env["BALATROBOT_NO_SHADERS"] = "1"
     env["BALATROBOT_HEADLESS"] = "1"

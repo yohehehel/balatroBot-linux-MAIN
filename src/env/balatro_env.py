@@ -147,8 +147,8 @@ class BalatroEnv(gym.Env):
         env["BALATROBOT_HOST"] = "127.0.0.1"
         env["BALATROBOT_PORT"] = str(self._env_id)
         env["BALATROBOT_FAST"] = "1"
-        env["BALATROBOT_GAMESPEED"] = "100000"
-        env["BALATROBOT_ANIMATION_FPS"] = "100000"
+        env["BALATROBOT_GAMESPEED"] = "10"
+        env["BALATROBOT_ANIMATION_FPS"] = "60"
         env["BALATROBOT_FPS_CAP"] = "250"
         env["BALATROBOT_NO_SHADERS"] = "1"
         env["BALATROBOT_HEADLESS"] = "1"

@@ -427,8 +427,8 @@ def main():
         env["BALATROBOT_HOST"] = "127.0.0.1"
         env["BALATROBOT_PORT"] = str(port)
         env["BALATROBOT_FAST"] = "1"
-        env["BALATROBOT_GAMESPEED"] = "100000"  # Was 10000 — cranked up further for 12-instance CPU contention
-        env["BALATROBOT_ANIMATION_FPS"] = "100000"  # Was 10000 — same rationale
+        env["BALATROBOT_GAMESPEED"] = "10"  # Was 100000
+        env["BALATROBOT_ANIMATION_FPS"] = "60"  # Was 100000
         env["BALATROBOT_FPS_CAP"] = "250"
         env["BALATROBOT_NO_SHADERS"] = "1"
         env["BALATROBOT_HEADLESS"] = "1"
