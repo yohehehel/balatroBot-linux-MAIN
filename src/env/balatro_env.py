@@ -196,7 +196,7 @@ class BalatroEnv(gym.Env):
                     # Escape hatch: if cash_out timed out and game is still stuck in ROUND_EVAL,
                     # calling cash_out again will block forever. Force-return to menu instead.
                     if action_type == "cash_out" and new_state.state == "ROUND_EVAL":
-                        logger.warning(
+                        logger.error(
                             f"[env:{self._env_id}] Stuck in ROUND_EVAL after cash_out timeout. "
                             f"Forcing menu() escape to unblock instance..."
                         )
@@ -220,7 +220,7 @@ class BalatroEnv(gym.Env):
             reward = self._calculate_reward(state, new_state)
             
             dt = time.monotonic() - t_start
-            if dt > 5.0:
+            if dt > 3.0:
                 logger.warning(
                     f"[env:{self._env_id}] step {self._step_count} slow: "
                     f"{action_type} took {dt:.1f}s (state: {state.state} -> {new_state.state})"

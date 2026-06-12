@@ -15,6 +15,12 @@ class BalatroAPIError(Exception):
 
 
 class BalatroClient:
+    # Timeout for most API calls (generous to handle slow Wine/game startup)
+    DEFAULT_TIMEOUT = 15.0
+    # Shorter timeout for cash_out: the game occasionally freezes in ROUND_EVAL
+    # and we want to fail fast so the env recovery logic can unblock the instance.
+    CASH_OUT_TIMEOUT = 8.0
+
     def __init__(self, base_url: str = "http://127.0.0.1:12346", timeout: float = 15.0):
         self.base_url = base_url
         self.timeout = timeout
@@ -137,9 +143,34 @@ class BalatroClient:
         return GameState.from_dict(res)
 
     def cash_out(self) -> GameState:
-        """Cash out after a round."""
-        res = self._call("cash_out")
-        return GameState.from_dict(res)
+        """Cash out after a round.
+        
+        Uses a reduced timeout (CASH_OUT_TIMEOUT) compared to other calls to avoid
+        long freezes when the game gets stuck in ROUND_EVAL. On timeout the caller
+        (BalatroEnv._execute_action) will catch the exception and trigger menu() escape.
+        """
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "cash_out",
+            "params": {},
+            "id": self._request_id
+        }
+        self._request_id += 1
+        try:
+            response = self.client.post("/", json=payload, timeout=self.CASH_OUT_TIMEOUT)
+            response.raise_for_status()
+            res_json = response.json()
+        except httpx.RequestError as e:
+            logger.error(f"HTTP request failed: {e}")
+            raise e
+        except ValueError as e:
+            logger.error(f"Failed to parse JSON response: {response.text}")
+            raise e
+        if "error" in res_json:
+            err = res_json["error"]
+            logger.error(f"JSON-RPC Error: {err}")
+            raise BalatroAPIError(err.get("code", -1), err.get("message", "Unknown error"), err.get("data"))
+        return GameState.from_dict(res_json.get("result"))
 
     def next_round(self) -> GameState:
         """Advance from shop to blind selection."""

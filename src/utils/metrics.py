@@ -112,7 +112,9 @@ class BalatroMetricsCallback(BaseCallback):
             self._last_live_step = self.num_timesteps
             elapsed = time.time() - self.start_time
             live_fps = self.num_timesteps / elapsed if elapsed > 0 else 0.0
-            total_steps = getattr(self.model, "total_timesteps", 0)
+            # _total_timesteps = target for the current learn() call (what was passed to model.learn())
+            # total_timesteps   = cumulative steps trained across all learn() calls (not what we want here)
+            total_steps = getattr(self.model, "_total_timesteps", None) or getattr(self.model, "total_timesteps", 0)
             percent = (self.num_timesteps / total_steps * 100) if isinstance(total_steps, (int, float)) and total_steps > 0 else 0.0
             cpu = psutil.cpu_percent(interval=None)
             ram = psutil.virtual_memory().percent
@@ -129,7 +131,8 @@ class BalatroMetricsCallback(BaseCallback):
         """
         Called when a rollout ends. Logs to console/TensorBoard and clears history.
         """
-        total_steps = getattr(self.model, "total_timesteps", 0)
+        # _total_timesteps = target for the current learn() call
+        total_steps = getattr(self.model, "_total_timesteps", None) or getattr(self.model, "total_timesteps", 0)
         current_steps = self.num_timesteps
         
         # Guard against MagicMock or non-number objects in tests
