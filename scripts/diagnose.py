@@ -258,6 +258,7 @@ def start_xvfb(display_num=99):
             "-screen", "0", "1024x768x24",
             "-ac",  # disable access control for simplicity
             "+extension", "GLX",  # ensure GLX extension is loaded
+            "-maxclients", "1024",  # prevent X11 client limits when running many instances
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
