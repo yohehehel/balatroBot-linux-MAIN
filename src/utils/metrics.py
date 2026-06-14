@@ -24,6 +24,7 @@ class BalatroMetricsCallback(BaseCallback):
         self.last_saved_path = None
         self.last_saved_step = 0
         self.start_time = time.time()
+        self.initial_steps = 0
         
         self.records_path = "logs/best_records.json"
         self.best_records = {
@@ -53,6 +54,11 @@ class BalatroMetricsCallback(BaseCallback):
                 json.dump(self.best_records, f, indent=4)
         except Exception:
             pass
+
+    def _on_training_start(self) -> None:
+        self.initial_steps = self.num_timesteps
+        self.start_time = time.time()
+        self._last_live_step = self.num_timesteps
 
     def _on_step(self) -> bool:
         # Check if there are any environment info updates (SB3 VecEnv passes infos)
@@ -111,7 +117,8 @@ class BalatroMetricsCallback(BaseCallback):
         if self.num_timesteps - self._last_live_step >= self._live_print_freq:
             self._last_live_step = self.num_timesteps
             elapsed = time.time() - self.start_time
-            live_fps = self.num_timesteps / elapsed if elapsed > 0 else 0.0
+            steps_current = self.num_timesteps - self.initial_steps
+            live_fps = steps_current / elapsed if elapsed > 0 else 0.0
             # _total_timesteps = target for the current learn() call (what was passed to model.learn())
             # total_timesteps   = cumulative steps trained across all learn() calls (not what we want here)
             total_steps = getattr(self.model, "_total_timesteps", None) or getattr(self.model, "total_timesteps", 0)
@@ -145,7 +152,8 @@ class BalatroMetricsCallback(BaseCallback):
         
         # Calculate speed (FPS)
         elapsed_time = time.time() - self.start_time
-        fps = current_steps / elapsed_time if elapsed_time > 0 else 0.0
+        steps_current = current_steps - self.initial_steps
+        fps = steps_current / elapsed_time if elapsed_time > 0 else 0.0
         
         # Get mean reward from SB3's ep_info_buffer
         mean_reward = 0.0
