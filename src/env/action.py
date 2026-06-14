@@ -150,8 +150,20 @@ def _decode_shop_action(action_type: int, card_mask: np.ndarray, game_state: Gam
     if action_type == 6:  # BUY_CARD
         idx = _first_set_bit(card_mask, max_idx=1)  # shop has max ~2 cards
         if game_state.shop and game_state.shop.cards and idx < len(game_state.shop.cards):
-            buy_cost = game_state.shop.cards[idx].cost.buy
+            card = game_state.shop.cards[idx]
+            buy_cost = card.cost.buy
             if money >= buy_cost:
+                # Check slot limits for Jokers and Consumables
+                if card.set == "JOKER":
+                    current_jokers = len(game_state.jokers.cards) if game_state.jokers else 0
+                    joker_limit = game_state.jokers.limit if game_state.jokers else 5
+                    if current_jokers >= joker_limit:
+                        return {"action": "next_round"}, True
+                elif card.set in ("TAROT", "PLANET", "SPECTRAL"):
+                    current_consumables = len(game_state.consumables.cards) if game_state.consumables else 0
+                    consumable_limit = game_state.consumables.limit if game_state.consumables else 2
+                    if current_consumables >= consumable_limit:
+                        return {"action": "next_round"}, True
                 return {"action": "buy_card", "index": idx}, True
         return {"action": "next_round"}, True
     
@@ -204,10 +216,21 @@ def _decode_booster_action(action_type: int, card_mask: np.ndarray, game_state: 
     if action_type == 11:  # PACK_SELECT
         idx = _first_set_bit(card_mask, max_idx=4)  # up to 5 cards in pack
         if idx < len(game_state.pack.cards):
+            card = game_state.pack.cards[idx]
+            if card.set == "JOKER":
+                current_jokers = len(game_state.jokers.cards) if game_state.jokers else 0
+                joker_limit = game_state.jokers.limit if game_state.jokers else 5
+                if current_jokers >= joker_limit:
+                    return {"action": "pack_skip"}, True
+            elif card.set in ("TAROT", "PLANET", "SPECTRAL"):
+                current_consumables = len(game_state.consumables.cards) if game_state.consumables else 0
+                consumable_limit = game_state.consumables.limit if game_state.consumables else 2
+                if current_consumables >= consumable_limit:
+                    return {"action": "pack_skip"}, True
             return {"action": "pack_select", "index": idx}, True
         else:
-            # Index out of range, select first card
-            return {"action": "pack_select", "index": 0}, True
+            # Index out of range, skip booster pack
+            return {"action": "pack_skip"}, True
     
     else:
         # action_type 12 (PACK_SKIP) or any other → skip
