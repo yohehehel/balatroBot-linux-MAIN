@@ -2,5 +2,4 @@ Balatro.v1.0.0i/
 .venv/
 __pycache__/
 scratch/
-logs/
 .pytest_cache/
