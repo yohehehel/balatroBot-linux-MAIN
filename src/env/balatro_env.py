@@ -245,8 +245,8 @@ class BalatroEnv(gym.Env):
                         try:
                             with open(newest_log, "r", encoding="utf-8", errors="ignore") as f:
                                 lines = f.readlines()
-                            logger.error(f"[env:{self._env_id}] Last 25 lines of Lovely log ({newest_log.name}):")
-                            for l in lines[-25:]:
+                            logger.error(f"[env:{self._env_id}] Last 80 lines of Lovely log ({newest_log.name}):")
+                            for l in lines[-80:]:
                                 logger.error(f"  lovely: {l.strip()}")
                         except Exception as e:
                             logger.error(f"[env:{self._env_id}] Failed to read Lovely log: {e}")

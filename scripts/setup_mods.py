@@ -517,11 +517,20 @@ love.update = function(dt)
       if not G.round_eval then
         sendInfoMessage("G.round_eval is nil during cash_out, creating dummy to allow state transition", "BB.MOD")
         G.round_eval = setmetatable({
-          alignment = { offset = {} },
-          remove = function() end
+          alignment = { offset = { x=0, y=0 } },
+          remove = function() end,
+          T = { x=0, y=0, w=0, h=0, r=0, scale=1 },
+          VT = { x=0, y=0, w=0, h=0, r=0, scale=1 },
         }, {
           __index = function(t, k)
-            return function() end
+            local methods = {
+              remove = true, draw = true, update = true, align = true, 
+              get_UIE_by_ID = true, juice_up = true, recreate = true
+            }
+            if methods[k] then
+              return function() end
+            end
+            return 0
           end
         })
       end
@@ -635,14 +644,20 @@ if G then
   G_mt.__index = function(t, k)
     if k == "round_eval" and G.STATE ~= G.STATES.ROUND_EVAL then
       return rawget(t, k) or setmetatable({
-        alignment = { offset = {} },
-        remove = function() end
+        alignment = { offset = { x=0, y=0 } },
+        remove = function() end,
+        T = { x=0, y=0, w=0, h=0, r=0, scale=1 },
+        VT = { x=0, y=0, w=0, h=0, r=0, scale=1 },
       }, {
         __index = function(t2, k2)
-          return setmetatable({}, {
-            __index = function() return function() end end,
-            __call = function() end
-          })
+          local methods = {
+            remove = true, draw = true, update = true, align = true, 
+            get_UIE_by_ID = true, juice_up = true, recreate = true
+          }
+          if methods[k2] then
+            return function() end
+          end
+          return 0
         end
       })
     end
