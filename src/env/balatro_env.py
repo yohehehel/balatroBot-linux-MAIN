@@ -528,7 +528,7 @@ class BalatroEnv(gym.Env):
             return self.client.sell(joker=action_dict["index"])
         # Phase 2: Booster pack actions
         elif action_type == "pack_select":
-            return self.client.pack(card=action_dict.get("index", 0))
+            return self.client.pack(card=action_dict.get("index", 0), targets=action_dict.get("targets"))
         elif action_type == "pack_skip":
             return self.client.pack(skip=True)
         else:

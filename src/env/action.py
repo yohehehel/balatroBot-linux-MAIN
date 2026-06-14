@@ -203,6 +203,17 @@ def _decode_shop_action(action_type: int, card_mask: np.ndarray, game_state: Gam
         return {"action": "next_round"}, True
 
 
+CARD_TARGET_COUNTS = {
+    # 1 target:
+    "c_magician": 1, "c_lovers": 1, "c_chariot": 1, "c_justice": 1, "c_tower": 1, "c_devil": 1,
+    # 2 targets:
+    "c_empress": 2, "c_heirophant": 2, "c_death": 2, "c_strength": 2, "c_hanged_man": 2,
+    # 3 targets:
+    "c_star": 3, "c_sun": 3, "c_moon": 3, "c_world": 3,
+    # Spectral cards:
+    "c_talisman": 1, "c_aura": 1, "c_cryptid": 1,
+}
+
 def _decode_booster_action(action_type: int, card_mask: np.ndarray, game_state: GameState) -> Tuple[dict, bool]:
     """Decode actions when a booster pack is opened.
     
@@ -227,7 +238,33 @@ def _decode_booster_action(action_type: int, card_mask: np.ndarray, game_state: 
                 consumable_limit = game_state.consumables.limit if game_state.consumables else 2
                 if current_consumables >= consumable_limit:
                     return {"action": "pack_skip"}, True
-            return {"action": "pack_select", "index": idx}, True
+            
+            # Select target cards from hand if required
+            targets = None
+            target_count = CARD_TARGET_COUNTS.get(card.key, 0)
+            if target_count > 0 and game_state.hand and game_state.hand.cards:
+                sorted_cards = sorted(
+                    enumerate(game_state.hand.cards),
+                    key=lambda x: get_card_sort_key(x[1])
+                )
+                
+                targets = []
+                # Select based on mask, excluding the bit used for pack index
+                for i, (orig_idx, _) in enumerate(sorted_cards[:8]):
+                    if i != idx and card_mask[i] == 1:
+                        targets.append(orig_idx)
+                        if len(targets) == target_count:
+                            break
+                
+                # Pad targets if mask did not select enough
+                if len(targets) < target_count:
+                    for orig_idx, _ in sorted_cards:
+                        if orig_idx not in targets:
+                            targets.append(orig_idx)
+                            if len(targets) == target_count:
+                                break
+                                
+            return {"action": "pack_select", "index": idx, "targets": targets}, True
         else:
             # Index out of range, skip booster pack
             return {"action": "pack_skip"}, True
