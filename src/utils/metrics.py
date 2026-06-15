@@ -93,22 +93,13 @@ class BalatroMetricsCallback(BaseCallback):
                 if updated:
                     self._save_records()
 
-        # Handle checkpoint saving with deletion of the previous checkpoint
+        # Handle checkpoint saving
         if self.save_freq > 0 and self.num_timesteps - self.last_saved_step >= self.save_freq:
             self.last_saved_step = self.num_timesteps
             new_save_path = os.path.join(self.model_dir, f"ppo_balatro_{self.num_timesteps}_steps.zip")
             try:
                 self.model.save(new_save_path)
                 print(f"\n[Saver] Checkpoint saved: {new_save_path}")
-                
-                # Delete the previous checkpoint file if it exists to save disk space
-                if self.last_saved_path and os.path.exists(self.last_saved_path):
-                    try:
-                        os.remove(self.last_saved_path)
-                        print(f"[Saver] Deleted previous checkpoint file to save disk space: {self.last_saved_path}")
-                    except Exception as e:
-                        print(f"[Saver] Warning: Could not remove previous checkpoint file {self.last_saved_path}: {e}")
-                
                 self.last_saved_path = new_save_path
             except Exception as e:
                 print(f"[Saver] Error saving checkpoint: {e}")

@@ -17,7 +17,7 @@ class TrainingConfig:
     
     # Training Loop Settings
     total_timesteps: int = 200_000
-    save_freq: int = 10_000
+    save_freq: int = 25_000
     eval_freq: int = 5_000
     device: str = "auto"
     
