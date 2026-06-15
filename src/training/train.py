@@ -138,23 +138,57 @@ def main():
         env = DummyVecEnv([make_env(api_urls[0])])
 
     # 4. Initialize or Load Model
+    n_envs = len(api_urls)
+    max_batch_size = config.n_steps * n_envs
+
     if args.resume:
         logger.info(f"Resuming training from model checkpoint: {args.resume}")
+        
+        # Build custom_objects to override hyperparameters on the loaded model
+        custom_objects = {
+            "n_steps": config.n_steps,
+            "n_epochs": config.n_epochs,
+            "clip_range": config.clip_range,
+        }
+        
+        # Ensure batch_size is compatible with n_steps * n_envs to avoid SB3 assertion error
+        target_batch_size = config.batch_size
+        if target_batch_size > max_batch_size:
+            logger.warning(
+                f"batch_size ({target_batch_size}) is larger than n_steps * n_envs ({max_batch_size}). "
+                f"Capping batch_size to {max_batch_size} to prevent SB3 crash."
+            )
+            target_batch_size = max_batch_size
+        custom_objects["batch_size"] = target_batch_size
+        
+        if args.learning_rate is not None:
+            custom_objects["learning_rate"] = args.learning_rate
+        else:
+            custom_objects["learning_rate"] = config.learning_rate
+            
+        if args.ent_coef is not None:
+            custom_objects["ent_coef"] = args.ent_coef
+            
         model = PPO.load(
             args.resume,
             env=env,
             device=config.device,
             tensorboard_log=config.log_dir,
+            custom_objects=custom_objects,
         )
         model.verbose = 0
-        # Update hyperparameters if overridden
-        if args.learning_rate is not None:
-            model.learning_rate = args.learning_rate
-        if args.ent_coef is not None:
-            model.ent_coef = args.ent_coef
     else:
         logger.info("Creating a new PPO model with MultiInputPolicy...")
         ppo_kwargs = config.to_ppo_kwargs()
+        
+        # Ensure batch_size is compatible with n_steps * n_envs
+        if ppo_kwargs["batch_size"] > max_batch_size:
+            logger.warning(
+                f"batch_size ({ppo_kwargs['batch_size']}) is larger than n_steps * n_envs ({max_batch_size}). "
+                f"Capping batch_size to {max_batch_size} to prevent SB3 crash."
+            )
+            ppo_kwargs["batch_size"] = max_batch_size
+            
         model = PPO(
             "MultiInputPolicy",
             env,

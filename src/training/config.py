@@ -4,12 +4,12 @@ from dataclasses import dataclass, field
 @dataclass
 class TrainingConfig:
     # PPO Hyperparameters
-    learning_rate: float = 3e-4
-    n_steps: int = 4096
-    batch_size: int = 256
-    n_epochs: int = 10
+    learning_rate: float = 1e-4
+    n_steps: int = 128
+    batch_size: int = 2048
+    n_epochs: int = 4
     gamma: float = 0.99
-    clip_range: float = 0.2
+    clip_range: float = 0.1
     ent_coef: float = 0.02
     
     # Network Architecture
