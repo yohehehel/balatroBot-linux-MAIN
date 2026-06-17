@@ -252,6 +252,20 @@ def benchmark_n_instances(num_instances, balatro_exe, original_balatro_dir, orig
     
     return sps
 
+class Tee:
+    def __init__(self, stream, filepath):
+        self.stream = stream
+        self.log = open(filepath, "a", encoding="utf-8")
+
+    def write(self, message):
+        self.stream.write(message)
+        self.log.write(message)
+        self.log.flush()
+
+    def flush(self):
+        self.stream.flush()
+        self.log.flush()
+
 def main():
     parser = argparse.ArgumentParser(description="Benchmark Balatro training speed across different instance counts.")
     parser.add_argument(
@@ -260,7 +274,28 @@ def main():
         default="16,32,48,64,80", 
         help="Comma-separated list of instance counts (e.g. 16,32), or ranges (e.g. 1-96 or 1-96-4)."
     )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="benchmark_results.csv",
+        help="Path to CSV file to save results incrementally."
+    )
+    parser.add_argument(
+        "--log",
+        type=str,
+        default="benchmark.log",
+        help="Path to log file for console output redirection."
+    )
     args = parser.parse_args()
+    
+    # Set up console log redirection (Tee stdout & stderr)
+    if args.log:
+        sys.stdout = Tee(sys.stdout, args.log)
+        sys.stderr = Tee(sys.stderr, args.log)
+        print(f"\n--- Starting Benchmark: {time.strftime('%Y-%m-%d %H:%M:%S')} ---")
+        print(f"Logging console output to: {args.log}")
+        
+    print(f"Saving incremental results to: {args.output}")
     
     # Parse instances list or ranges
     instance_counts = []
@@ -346,6 +381,18 @@ def main():
             sps = benchmark_n_instances(n, balatro_exe, original_balatro_dir, original_mods_dir, xvfb_display)
             if sps is not None:
                 results[n] = sps
+                sps_per_inst = sps / n
+                # Write to CSV incrementally
+                try:
+                    output_path = Path(args.output)
+                    write_header = not output_path.exists() or output_path.stat().st_size == 0
+                    with open(output_path, "a", encoding="utf-8") as f:
+                        if write_header:
+                            f.write("Timestamp,Instances,SPS,SPS_per_Instance\n")
+                        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                        f.write(f"{timestamp},{n},{sps:.2f},{sps_per_inst:.2f}\n")
+                except Exception as e:
+                    print(f"Error saving incremental result to CSV: {e}")
                 
         # Print final report
         print("\n\n==========================================")
