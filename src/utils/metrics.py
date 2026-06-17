@@ -118,7 +118,7 @@ class BalatroMetricsCallback(BaseCallback):
             ram = psutil.virtual_memory().percent
             print(
                 f"\r⏱  [{self.num_timesteps:>8}/{total_steps}] "
-                f"{percent:5.1f}%  |  ⚡ {live_fps:6.1f} steps/s  "
+                f"{percent:6.2f}%  |  ⚡ {live_fps:6.1f} steps/s  "
                 f"|  🖥  CPU {cpu:4.1f}%  RAM {ram:4.1f}%",
                 end="", flush=True
             )
