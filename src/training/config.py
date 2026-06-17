@@ -6,11 +6,12 @@ class TrainingConfig:
     # PPO Hyperparameters
     learning_rate: float = 1e-4
     n_steps: int = 128
-    batch_size: int = 2048
+    batch_size: int = 4096
     n_epochs: int = 4
     gamma: float = 0.99
     clip_range: float = 0.1
     ent_coef: float = 0.02
+    target_kl: float = 0.02
     
     # Network Architecture
     policy_kwargs: dict = field(default_factory=lambda: dict(net_arch=dict(pi=[512, 512], vf=[512, 512])))
@@ -35,6 +36,7 @@ class TrainingConfig:
             "gamma": self.gamma,
             "clip_range": self.clip_range,
             "ent_coef": self.ent_coef,
+            "target_kl": self.target_kl,
             "device": self.device,
             "policy_kwargs": self.policy_kwargs,
         }

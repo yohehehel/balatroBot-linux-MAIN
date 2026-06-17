@@ -151,6 +151,7 @@ def main():
             "n_steps": config.n_steps,
             "n_epochs": config.n_epochs,
             "clip_range": config.clip_range,
+            "target_kl": config.target_kl,
         }
         
         # Ensure batch_size is compatible with n_steps * n_envs to avoid SB3 assertion error
