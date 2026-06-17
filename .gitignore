@@ -3,3 +3,4 @@ Balatro.v1.0.0i/
 __pycache__/
 scratch/
 .pytest_cache/
+models/
