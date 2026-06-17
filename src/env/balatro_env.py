@@ -329,6 +329,7 @@ class BalatroEnv(gym.Env):
                 reward = -5.0  # Same penalty as GAME OVER (loss) to prevent exploit
         else:
             self.invalid_actions_in_a_row = 0
+            step_penalty = 0.0
             
             # Track shop actions to prevent infinite loops
             if state.state == "SHOP" and action_type != "next_round":
@@ -349,7 +350,7 @@ class BalatroEnv(gym.Env):
                 self._consecutive_timeout_errors = 0
             except BalatroAPIError as e:
                 logger.error(f"API Error during step execution: {e}. Attempting to recover state...")
-                reward = -0.5
+                step_penalty = -0.5
                 try:
                     new_state = self.client.gamestate(timeout=3.0)
                     logger.info(f"State successfully recovered. New state: {new_state.state}")
@@ -367,7 +368,7 @@ class BalatroEnv(gym.Env):
                 except Exception as diag_err:
                     logger.error(f"Failed to run diagnostic logger: {diag_err}")
                     
-                reward = -0.5
+                step_penalty = -0.5
                 err_str = str(e).lower()
                 is_conn_refused = "connection refused" in err_str or "errno 111" in err_str
                 is_timeout = "timed out" in err_str or "timeout" in err_str
@@ -469,7 +470,7 @@ class BalatroEnv(gym.Env):
                 new_state = self._auto_skip_boosters(new_state)
             
             # Calculate reward
-            reward = self._calculate_reward(state, new_state)
+            reward = self._calculate_reward(state, new_state) + step_penalty
             
             dt = time.monotonic() - t_start
             if dt > 3.0:

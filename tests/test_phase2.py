@@ -118,6 +118,29 @@ def test_decode_booster_skip():
     assert result["action"] == "pack_skip"
     print("✓ Booster pack_skip decode correct")
 
+def test_decode_booster_select_spectral_target():
+    state = GameState.from_dict({
+        "state": "SPECTRAL_PACK",
+        "pack": {"count": 1, "limit": 1, "cards": [
+            {"id": 1, "key": "c_deja_vu", "set": "SPECTRAL", "label": "Deja Vu",
+             "value": {}, "modifier": {}, "state": {}, "cost": {}},
+        ]},
+        "hand": {"count": 5, "limit": 8, "cards": [
+            {"id": i, "key": f"card{i}", "set": "DEFAULT", "label": f"Card{i}",
+             "value": {"suit": "H", "rank": "2"}, "modifier": {}, "state": {}, "cost": {}}
+            for i in range(5)
+        ]}
+    })
+    # action_type=11 (PACK_SELECT), card_mask bit 0 set (pack card index 0)
+    # card_mask bit 1 set (select first card in hand as target)
+    action = np.array([11, 1, 1, 0, 0, 0, 0, 0, 0])
+    result, valid = decode_action(action, state)
+    assert valid
+    assert result["action"] == "pack_select"
+    assert result["index"] == 0
+    assert result["targets"] == [0]
+    print("✓ Booster pack_select with c_deja_vu target selection correct")
+
 def test_phase1_actions_unchanged():
     """Verify Phase 1 actions still work identically."""
     # SELECTING_HAND: play
@@ -251,6 +274,7 @@ if __name__ == "__main__":
     test_decode_shop_sell_joker()
     test_decode_shop_next_round()
     test_decode_booster_select()
+    test_decode_booster_select_spectral_target()
     test_decode_booster_skip()
     test_phase1_actions_unchanged()
     test_observation_with_shop_data()

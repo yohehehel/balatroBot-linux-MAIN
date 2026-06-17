@@ -211,7 +211,7 @@ CARD_TARGET_COUNTS = {
     # 3 targets:
     "c_star": 3, "c_sun": 3, "c_moon": 3, "c_world": 3,
     # Spectral cards:
-    "c_talisman": 1, "c_aura": 1, "c_cryptid": 1,
+    "c_talisman": 1, "c_aura": 1, "c_cryptid": 1, "c_deja_vu": 1, "c_trance": 1, "c_medium": 1,
 }
 
 def _decode_booster_action(action_type: int, card_mask: np.ndarray, game_state: GameState) -> Tuple[dict, bool]:
