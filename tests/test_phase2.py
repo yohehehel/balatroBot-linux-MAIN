@@ -265,6 +265,65 @@ def test_observation_hand_sorting_and_flags():
     
     print("✓ Hand sorting and flags correct")
 
+def test_hand_type_reward_shaping():
+    from src.env.balatro_env import BalatroEnv
+    env = BalatroEnv()
+    
+    # Mock states
+    state1 = GameState.from_dict({
+        "state": "SELECTING_HAND",
+        "ante_num": 1,
+        "round_num": 1,
+        "money": 10,
+        "jokers": {"cards": []},
+        "hands": {
+            "Flush": {"played": 0},
+            "High Card": {"played": 2}
+        },
+        "blinds": {"small": {"type": "SMALL", "status": "CURRENT", "score": 300}},
+        "round": {"chips": 0}
+    })
+    
+    # State 2: played a Flush
+    state2 = GameState.from_dict({
+        "state": "SELECTING_HAND",
+        "ante_num": 1,
+        "round_num": 1,
+        "money": 10,
+        "jokers": {"cards": []},
+        "hands": {
+            "Flush": {"played": 1},
+            "High Card": {"played": 2}
+        },
+        "blinds": {"small": {"type": "SMALL", "status": "CURRENT", "score": 300}},
+        "round": {"chips": 150} # gained 150 chips
+    })
+    
+    # ratio = 0.5. Chip reward = 0.5 + 2*(0.25) = 1.0. Flush = 0.8. Total = 1.8
+    reward = env._calculate_reward(state1, state2)
+    assert abs(reward - 1.8) < 1e-5, f"Expected 1.8, got {reward}"
+    
+    # State 3: played a High Card
+    state3 = GameState.from_dict({
+        "state": "SELECTING_HAND",
+        "ante_num": 1,
+        "round_num": 1,
+        "money": 10,
+        "jokers": {"cards": []},
+        "hands": {
+            "Flush": {"played": 0},
+            "High Card": {"played": 3}
+        },
+        "blinds": {"small": {"type": "SMALL", "status": "CURRENT", "score": 300}},
+        "round": {"chips": 10} # gained 10 chips
+    })
+    
+    reward2 = env._calculate_reward(state1, state3)
+    expected = (10/300) + 2.0 * ((10/300) ** 2) - 0.1
+    assert abs(reward2 - expected) < 1e-5, f"Expected {expected}, got {reward2}"
+    
+    print("✓ Hand-type reward shaping correct")
+
 if __name__ == "__main__":
     test_action_space()
     test_observation_space()
@@ -279,6 +338,5 @@ if __name__ == "__main__":
     test_phase1_actions_unchanged()
     test_observation_with_shop_data()
     test_observation_hand_sorting_and_flags()
+    test_hand_type_reward_shaping()
     print("\n🎉 All Phase 2 smoke tests passed!")
-
-

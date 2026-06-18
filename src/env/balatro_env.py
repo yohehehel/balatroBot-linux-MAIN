@@ -590,7 +590,35 @@ class BalatroEnv(gym.Env):
             reward += 0.5 * (new_joker_count - old_joker_count)
             logger.debug(f"Joker acquired! {old_joker_count} -> {new_joker_count}")
 
-        # 7. Game end conditions
+        # 7. Hand type reward shaping (poker hand combinations)
+        # Check if a hand was played. We do this by checking if the state transitions from SELECTING_HAND and
+        # looking at the count of played hands.
+        if old_state.state == "SELECTING_HAND" and old_state.hands and new_state.hands:
+            hand_type_rewards = {
+                "Flush Five": 1.5,
+                "Flush House": 1.5,
+                "Five of a Kind": 1.2,
+                "Straight Flush": 1.2,
+                "Four of a Kind": 1.0,
+                "Full House": 0.8,
+                "Flush": 0.8,
+                "Straight": 0.6,
+                "Three of a Kind": 0.3,
+                "Two Pair": 0.2,
+                "Pair": 0.0,
+                "High Card": -0.1
+            }
+            for htype in HAND_TYPES_BY_PRIORITY:
+                old_count = old_state.hands[htype].played if htype in old_state.hands else 0
+                new_count = new_state.hands[htype].played if htype in new_state.hands else 0
+                if new_count > old_count:
+                    bonus = hand_type_rewards.get(htype, 0.0)
+                    reward += bonus
+                    if bonus != 0.0:
+                        logger.info(f"Hand played: {htype}! Reward bonus: {bonus}")
+                    break
+
+        # 8. Game end conditions
         if new_state.state == "GAME_OVER":
             if new_state.won:
                 reward += 10.0
@@ -600,3 +628,4 @@ class BalatroEnv(gym.Env):
                 logger.info("GAME OVER (RUN LOST). Penalty given.")
                 
         return reward
+
