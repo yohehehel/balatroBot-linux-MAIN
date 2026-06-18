@@ -549,20 +549,8 @@ def main():
         print("Training session finished successfully!")
     except KeyboardInterrupt:
         print("Training interrupted by user. Cleaning up...")
-        # Dump logs for all instances to help debug hang
-        for port in ports:
-            try:
-                dump_instance_logs(port, original_balatro_dir)
-            except Exception as de:
-                print(f"Failed to dump logs for port {port}: {de}")
     except Exception as e:
         print(f"Error during training: {e}")
-        # Dump logs for all instances
-        for port in ports:
-            try:
-                dump_instance_logs(port, original_balatro_dir)
-            except Exception as de:
-                print(f"Failed to dump logs for port {port}: {de}")
     finally:
         terminate_processes(processes)
         stop_xvfb(xvfb_proc)
