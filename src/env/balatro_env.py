@@ -8,6 +8,7 @@ from src.client import BalatroClient, BalatroAPIError
 from src.game_state import GameState
 from src.env.observation import get_observation_space, encode_observation
 from src.env.action import get_action_space, decode_action, BOOSTER_STATES
+from src.hand_evaluator import HAND_TYPES_BY_PRIORITY
 
 logger = logging.getLogger("BalatroEnv")
 
@@ -44,9 +45,12 @@ class BalatroEnv(gym.Env):
         # Phase 2: shop action counter to prevent infinite shop loops
         self._shop_actions_taken = 0
         # Dead-instance detection: counts consecutive steps that got Connection refused.
-        # When it reaches MAX_DEAD_STEPS the episode is truncated so SB3 doesn't spin forever.
         self._consecutive_conn_errors = 0
         self._consecutive_timeout_errors = 0
+        
+        # Metrics tracking
+        self.episode_jokers = []
+        self.played_hands_counts = {htype: 0 for htype in HAND_TYPES_BY_PRIORITY}
 
     def _auto_skip_boosters(self, state: GameState) -> GameState:
         """Fallback: automatically skip booster pack selection if the agent
@@ -258,6 +262,8 @@ class BalatroEnv(gym.Env):
         self._shop_actions_taken = 0
         self._consecutive_conn_errors = 0
         self._consecutive_timeout_errors = 0
+        self.episode_jokers = []
+        self.played_hands_counts = {htype: 0 for htype in HAND_TYPES_BY_PRIORITY}
         
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
@@ -389,15 +395,7 @@ class BalatroEnv(gym.Env):
                         )
                         self.current_state = state  # keep last known state
                         obs = encode_observation(state)
-                        info = {
-                            "episode_metrics": {
-                                "won": False,
-                                "ante": int(state.ante_num),
-                                "round": int(state.round_num),
-                                "money": float(state.money),
-                                "chips": float(state.round.chips) if state.round else 0.0,
-                            }
-                        }
+                        info = {"episode_metrics": self._get_episode_metrics(state)}
                         return obs, -5.0, False, True, info
                     new_state = state
                 elif is_timeout:
@@ -415,15 +413,7 @@ class BalatroEnv(gym.Env):
                         )
                         self.current_state = state  # keep last known state
                         obs = encode_observation(state)
-                        info = {
-                            "episode_metrics": {
-                                "won": False,
-                                "ante": int(state.ante_num),
-                                "round": int(state.round_num),
-                                "money": float(state.money),
-                                "chips": float(state.round.chips) if state.round else 0.0,
-                            }
-                        }
+                        info = {"episode_metrics": self._get_episode_metrics(state)}
                         return obs, -5.0, False, True, info
                     
                     try:
@@ -479,6 +469,17 @@ class BalatroEnv(gym.Env):
                     f"{action_type} took {dt:.1f}s (state: {state.state} -> {new_state.state})"
                 )
             
+        # Record step metrics
+        num_jokers = len(new_state.jokers.cards) if (new_state and new_state.jokers and new_state.jokers.cards) else 0
+        self.episode_jokers.append(num_jokers)
+        
+        if is_valid and action_type == "play" and state.hands and new_state.hands:
+            for htype in HAND_TYPES_BY_PRIORITY:
+                old_count = state.hands[htype].played if htype in state.hands else 0
+                new_count = new_state.hands[htype].played if htype in new_state.hands else 0
+                if new_count > old_count:
+                    self.played_hands_counts[htype] += (new_count - old_count)
+
         # Update current state
         self.current_state = new_state
         obs = encode_observation(new_state)
@@ -488,15 +489,24 @@ class BalatroEnv(gym.Env):
             terminated = True
             
         if terminated or truncated:
-            info["episode_metrics"] = {
-                "won": bool(new_state.won) if new_state.won is not None else False,
-                "ante": int(new_state.ante_num),
-                "round": int(new_state.round_num),
-                "money": float(new_state.money),
-                "chips": float(new_state.round.chips) if new_state.round else 0.0,
-            }
+            info["episode_metrics"] = self._get_episode_metrics(new_state)
             
         return obs, reward, terminated, truncated, info
+
+    def _get_episode_metrics(self, state: GameState) -> dict:
+        metrics = {
+            "won": bool(state.won) if state.won is not None else False,
+            "ante": int(state.ante_num),
+            "round": int(state.round_num),
+            "money": float(state.money),
+            "chips": float(state.round.chips) if state.round else 0.0,
+            "mean_jokers": float(np.mean(self.episode_jokers)) if self.episode_jokers else 0.0,
+            "max_jokers": float(np.max(self.episode_jokers)) if self.episode_jokers else 0.0,
+        }
+        for htype in HAND_TYPES_BY_PRIORITY:
+            metric_name = f"hand_{htype.replace(' ', '_')}"
+            metrics[metric_name] = float(self.played_hands_counts[htype])
+        return metrics
 
     def _execute_action(self, action_type: str, action_dict: dict, state: GameState) -> GameState:
         """Execute a decoded action against the Balatro API and return the new state."""

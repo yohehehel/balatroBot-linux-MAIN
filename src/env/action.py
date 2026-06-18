@@ -143,7 +143,7 @@ def _decode_shop_action(action_type: int, card_mask: np.ndarray, game_state: Gam
     
     Valid action types: 6 (buy card), 7 (buy voucher), 8 (buy pack),
     9 (reroll), 10 (sell joker), 5 (next_round).
-    All other types default to next_round.
+    All other types default to wait (except 5 next_round).
     """
     money = float(game_state.money)
     
@@ -158,14 +158,14 @@ def _decode_shop_action(action_type: int, card_mask: np.ndarray, game_state: Gam
                     current_jokers = len(game_state.jokers.cards) if game_state.jokers else 0
                     joker_limit = game_state.jokers.limit if game_state.jokers else 5
                     if current_jokers >= joker_limit:
-                        return {"action": "next_round"}, True
+                        return {"action": "wait"}, True
                 elif card.set in ("TAROT", "PLANET", "SPECTRAL"):
                     current_consumables = len(game_state.consumables.cards) if game_state.consumables else 0
                     consumable_limit = game_state.consumables.limit if game_state.consumables else 2
                     if current_consumables >= consumable_limit:
-                        return {"action": "next_round"}, True
+                        return {"action": "wait"}, True
                 return {"action": "buy_card", "index": idx}, True
-        return {"action": "next_round"}, True
+        return {"action": "wait"}, True
     
     elif action_type == 7:  # BUY_VOUCHER
         idx = _first_set_bit(card_mask, max_idx=1)
@@ -173,7 +173,7 @@ def _decode_shop_action(action_type: int, card_mask: np.ndarray, game_state: Gam
             buy_cost = game_state.vouchers.cards[idx].cost.buy
             if money >= buy_cost:
                 return {"action": "buy_voucher", "index": idx}, True
-        return {"action": "next_round"}, True
+        return {"action": "wait"}, True
     
     elif action_type == 8:  # BUY_PACK
         idx = _first_set_bit(card_mask, max_idx=1)
@@ -181,13 +181,13 @@ def _decode_shop_action(action_type: int, card_mask: np.ndarray, game_state: Gam
             buy_cost = game_state.packs.cards[idx].cost.buy
             if money >= buy_cost:
                 return {"action": "buy_pack", "index": idx}, True
-        return {"action": "next_round"}, True
+        return {"action": "wait"}, True
     
     elif action_type == 9:  # REROLL
         reroll_cost = game_state.round.reroll_cost
         if money >= reroll_cost:
             return {"action": "reroll"}, True
-        return {"action": "next_round"}, True
+        return {"action": "wait"}, True
     
     elif action_type == 10:  # SELL_JOKER
         idx = _first_set_bit(card_mask, max_idx=4)  # max 5 joker slots
@@ -196,11 +196,14 @@ def _decode_shop_action(action_type: int, card_mask: np.ndarray, game_state: Gam
             joker = game_state.jokers.cards[idx]
             if not joker.modifier.eternal:
                 return {"action": "sell_joker", "index": idx}, True
-        return {"action": "next_round"}, True
+        return {"action": "wait"}, True
     
-    else:
-        # action_type 5 (NEXT_ROUND) or any other → leave shop
+    elif action_type == 5:  # NEXT_ROUND
         return {"action": "next_round"}, True
+        
+    else:
+        # any other → wait in shop
+        return {"action": "wait"}, True
 
 
 CARD_TARGET_COUNTS = {
@@ -218,7 +221,7 @@ def _decode_booster_action(action_type: int, card_mask: np.ndarray, game_state: 
     """Decode actions when a booster pack is opened.
     
     Valid action types: 11 (pack_select), 12 (pack_skip).
-    All other types default to pack_skip for safety.
+    All other types default to wait (except 12 pack_skip).
     """
     if not game_state.pack or not game_state.pack.cards:
         # No pack cards available — skip
@@ -232,12 +235,12 @@ def _decode_booster_action(action_type: int, card_mask: np.ndarray, game_state: 
                 current_jokers = len(game_state.jokers.cards) if game_state.jokers else 0
                 joker_limit = game_state.jokers.limit if game_state.jokers else 5
                 if current_jokers >= joker_limit:
-                    return {"action": "pack_skip"}, True
+                    return {"action": "wait"}, True
             elif card.set in ("TAROT", "PLANET", "SPECTRAL"):
                 current_consumables = len(game_state.consumables.cards) if game_state.consumables else 0
                 consumable_limit = game_state.consumables.limit if game_state.consumables else 2
                 if current_consumables >= consumable_limit:
-                    return {"action": "pack_skip"}, True
+                    return {"action": "wait"}, True
             
             # Select target cards from hand if required
             targets = None
@@ -266,9 +269,12 @@ def _decode_booster_action(action_type: int, card_mask: np.ndarray, game_state: 
                                 
             return {"action": "pack_select", "index": idx, "targets": targets}, True
         else:
-            # Index out of range, skip booster pack
-            return {"action": "pack_skip"}, True
+            # Index out of range
+            return {"action": "wait"}, True
+            
+    elif action_type == 12:  # PACK_SKIP
+        return {"action": "pack_skip"}, True
     
     else:
-        # action_type 12 (PACK_SKIP) or any other → skip
-        return {"action": "pack_skip"}, True
+        # any other → wait in booster
+        return {"action": "wait"}, True

@@ -40,12 +40,12 @@ def test_decode_shop_buy_card_no_money():
              "value": {}, "modifier": {}, "state": {}, "cost": {"buy": 4, "sell": 2}}
         ]}
     })
-    # action_type=6 (BUY_CARD) but money (2) < cost (4) -> fallback next_round
+    # action_type=6 (BUY_CARD) but money (2) < cost (4) -> fallback wait
     action = np.array([6, 1, 0, 0, 0, 0, 0, 0, 0])
     result, valid = decode_action(action, state)
     assert valid
-    assert result["action"] == "next_round"
-    print("✓ Shop buy_card fallback to next_round when no money correct")
+    assert result["action"] == "wait"
+    print("✓ Shop buy_card fallback to wait when no money correct")
 
 def test_decode_shop_reroll():
     state = GameState.from_dict({
@@ -132,13 +132,13 @@ def test_decode_booster_select_spectral_target():
         ]}
     })
     # action_type=11 (PACK_SELECT), card_mask bit 0 set (pack card index 0)
-    # card_mask bit 1 set (select first card in hand as target)
+    # card_mask bit 1 set (select second card in hand as target)
     action = np.array([11, 1, 1, 0, 0, 0, 0, 0, 0])
     result, valid = decode_action(action, state)
     assert valid
     assert result["action"] == "pack_select"
     assert result["index"] == 0
-    assert result["targets"] == [0]
+    assert result["targets"] == [1]
     print("✓ Booster pack_select with c_deja_vu target selection correct")
 
 def test_phase1_actions_unchanged():

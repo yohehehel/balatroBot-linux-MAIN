@@ -4,6 +4,7 @@ import time
 import numpy as np
 import psutil
 from stable_baselines3.common.callbacks import BaseCallback
+from src.hand_evaluator import HAND_TYPES_BY_PRIORITY
 
 class BalatroMetricsCallback(BaseCallback):
     """
@@ -18,6 +19,11 @@ class BalatroMetricsCallback(BaseCallback):
         self.episode_moneys = []
         self.episode_rounds = []
         self.episode_chips = []
+        
+        # New metrics:
+        self.episode_mean_jokers = []
+        self.episode_max_jokers = []
+        self.episode_hand_counts = {htype: [] for htype in HAND_TYPES_BY_PRIORITY}
         
         self.save_freq = save_freq
         self.model_dir = model_dir
@@ -76,6 +82,13 @@ class BalatroMetricsCallback(BaseCallback):
                 self.episode_moneys.append(money)
                 self.episode_rounds.append(float(round_num))
                 self.episode_chips.append(chips)
+                
+                # Append new metrics
+                self.episode_mean_jokers.append(float(metrics.get("mean_jokers", 0.0)))
+                self.episode_max_jokers.append(float(metrics.get("max_jokers", 0.0)))
+                for htype in HAND_TYPES_BY_PRIORITY:
+                    metric_name = f"hand_{htype.replace(' ', '_')}"
+                    self.episode_hand_counts[htype].append(float(metrics.get(metric_name, 0.0)))
 
                 # Check and update historical best records
                 updated = False
@@ -171,6 +184,14 @@ class BalatroMetricsCallback(BaseCallback):
             print(f"Mean Max Ante: {mean_ante:.1f}")
             print(f"Mean Money: ${mean_money:.2f}")
             print(f"Mean Chips: {mean_chips:.1f}")
+            print(f"Mean Jokers (run avg): {np.mean(self.episode_mean_jokers):.2f}")
+            print(f"Max Jokers (run max):  {np.mean(self.episode_max_jokers):.2f}")
+            
+            hand_means = {htype: np.mean(self.episode_hand_counts[htype]) for htype in HAND_TYPES_BY_PRIORITY}
+            non_zero_hands = {k: v for k, v in hand_means.items() if v > 0}
+            if non_zero_hands:
+                hands_str = ", ".join([f"{k}: {v:.1f}" for k, v in sorted(non_zero_hands.items(), key=lambda x: x[1], reverse=True)])
+                print(f"Hands Played (avg):    {hands_str}")
         
         print(f"Best Records: Ante {self.best_records['best_ante']} | Money ${self.best_records['best_money']:.2f} | Chips {self.best_records['best_chips']:.1f}")
         print("======================================================\n")
@@ -181,6 +202,13 @@ class BalatroMetricsCallback(BaseCallback):
             self.logger.record("balatro/mean_money", np.mean(self.episode_moneys))
             self.logger.record("balatro/mean_round_num", np.mean(self.episode_rounds))
             self.logger.record("balatro/mean_final_chips", np.mean(self.episode_chips))
+            self.logger.record("balatro/mean_jokers", np.mean(self.episode_mean_jokers))
+            self.logger.record("balatro/max_jokers", np.mean(self.episode_max_jokers))
+            for htype in HAND_TYPES_BY_PRIORITY:
+                self.logger.record(
+                    f"balatro/hands_{htype.replace(' ', '_')}",
+                    np.mean(self.episode_hand_counts[htype])
+                )
             
             # Clear history
             self.episode_wons.clear()
@@ -188,3 +216,7 @@ class BalatroMetricsCallback(BaseCallback):
             self.episode_moneys.clear()
             self.episode_rounds.clear()
             self.episode_chips.clear()
+            self.episode_mean_jokers.clear()
+            self.episode_max_jokers.clear()
+            for htype in HAND_TYPES_BY_PRIORITY:
+                self.episode_hand_counts[htype].clear()
