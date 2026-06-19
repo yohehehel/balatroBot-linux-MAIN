@@ -461,26 +461,49 @@ def main():
         )
         processes.append((p, stdout_file, stderr_file))
         print(f"Started instance on port {port} (PID: {p.pid})")
-        time.sleep(2.0)
+        time.sleep(0.5)
         
     print("Waiting for instances to initialize (polling for up to 120 seconds)...")
     t_start = time.time()
     all_healthy = False
+    reported_dead_pids = set()  # Track PIDs already reported as dead to avoid spam
     while time.time() - t_start < 120:
         time.sleep(2.0)
         
-        # Check if any process has exited early
-        for p, _, _ in processes:
-            if p.poll() is not None:
-                print(f"Warning: Balatro process (PID {p.pid}) terminated early with exit code {p.poll()}")
+        # Check if any process has exited early (only report each death once)
+        newly_dead = []
+        for idx, (p, _, _) in enumerate(processes):
+            if p.poll() is not None and p.pid not in reported_dead_pids:
+                reported_dead_pids.add(p.pid)
+                port = ports[idx]
+                print(f"Warning: Balatro process (PID {p.pid}, port {port}) terminated early with exit code {p.returncode}")
+                newly_dead.append(port)
+        
+        # Dump logs immediately for newly-dead processes
+        for port in newly_dead:
+            try:
+                dump_instance_logs(port, original_balatro_dir)
+            except Exception as de:
+                print(f"Failed to dump logs for port {port}: {de}")
+        
+        # Early abort: if ALL processes are dead, no point waiting 120s
+        all_dead = all(p.poll() is not None for p, _, _ in processes)
+        if all_dead:
+            print(f"ERROR: All {len(processes)} Balatro processes have died. Aborting immediately.")
+            break
                 
-        # Check health of all instances
+        # Check health of all instances (only check ports whose processes are still alive)
         current_healthy = True
-        for port in ports:
+        for idx, port in enumerate(ports):
+            proc = processes[idx][0]
+            if proc.poll() is not None:
+                # Process is dead, can't be healthy
+                current_healthy = False
+                continue
             passed, error = check_health(port)
             if not passed:
                 current_healthy = False
-                break
+                # Don't break — keep checking to discover all dead processes
         if current_healthy:
             print(f"All instances are healthy and initialized after {time.time() - t_start:.1f} seconds!")
             all_healthy = True
@@ -488,7 +511,7 @@ def main():
     else:
         # Final evaluation check and log dump for failures
         all_healthy = True
-        for port in ports:
+        for idx, port in enumerate(ports):
             passed, error = check_health(port)
             if passed:
                 print(f"Health check PASSED for port {port}")
@@ -497,18 +520,20 @@ def main():
                 all_healthy = False
                 
                 # Print process status
-                idx = ports.index(port)
                 proc = processes[idx][0]
                 exit_code = proc.poll()
                 print(f"Process PID: {proc.pid}, status (None=running, integer=exited): {exit_code}")
                 
-                try:
-                    dump_instance_logs(port, original_balatro_dir)
-                except Exception as de:
-                    print(f"Failed to dump logs: {de}")
+                if proc.pid not in reported_dead_pids:
+                    try:
+                        dump_instance_logs(port, original_balatro_dir)
+                    except Exception as de:
+                        print(f"Failed to dump logs: {de}")
             
     if not all_healthy:
-        print("Not all instances started successfully. Aborting training.")
+        num_dead = len(reported_dead_pids)
+        num_alive = len(processes) - num_dead
+        print(f"Not all instances started successfully ({num_dead} dead, {num_alive} alive). Aborting training.")
         terminate_processes(processes)
         sys.exit(1)
         
