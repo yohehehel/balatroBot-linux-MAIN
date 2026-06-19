@@ -110,6 +110,8 @@ class BalatroEnv(gym.Env):
         import sys
         import os
         import time
+        import urllib.request
+        import json
         from pathlib import Path
 
         logger.warning(f"[env:{self._env_id}] Killing and restarting Balatro instance on port {self._env_id}...")
@@ -182,6 +184,22 @@ class BalatroEnv(gym.Env):
             logger.info(f"[env:{self._env_id}] Relaunch command spawned successfully.")
         except Exception as launch_err:
             logger.error(f"[env:{self._env_id}] Failed to relaunch Balatro: {launch_err}")
+            return
+        
+        # 3. Poll for health (wait up to 30s for the new process to become responsive)
+        url = f"http://127.0.0.1:{self._env_id}"
+        health_data = json.dumps({"jsonrpc": "2.0", "method": "health", "params": {}, "id": 1}).encode('utf-8')
+        for i in range(15):  # 15 × 2s = 30s
+            time.sleep(2.0)
+            try:
+                req = urllib.request.Request(url, data=health_data, headers={'Content-Type': 'application/json'})
+                with urllib.request.urlopen(req, timeout=2) as r:
+                    if r.status == 200:
+                        logger.info(f"[env:{self._env_id}] Restarted instance is healthy after {(i+1)*2}s")
+                        return
+            except Exception:
+                pass
+        logger.warning(f"[env:{self._env_id}] Restarted instance did not become healthy within 30s")
 
     def _log_diagnostics(self):
         import os
@@ -265,7 +283,7 @@ class BalatroEnv(gym.Env):
         self.episode_jokers = []
         self.played_hands_counts = {htype: 0 for htype in HAND_TYPES_BY_PRIORITY}
         
-        max_attempts = 3
+        max_attempts = 5
         for attempt in range(1, max_attempts + 1):
             try:
                 logger.info(f"Resetting Balatro environment (attempt {attempt}/{max_attempts})...")
@@ -294,14 +312,23 @@ class BalatroEnv(gym.Env):
             except Exception as e:
                 logger.warning(f"Reset attempt {attempt} failed: {e}")
                 if attempt == max_attempts:
-                    logger.error("All reset attempts failed.")
-                    raise e
+                    # CRITICAL: Do NOT raise — it would crash the SubprocVecEnv worker
+                    # and kill the entire training run. Return a zero observation instead.
+                    logger.error(
+                        f"[env:{self._env_id}] All {max_attempts} reset attempts failed. "
+                        f"Returning zero observation to keep worker alive."
+                    )
+                    obs = encode_observation(self.current_state) if self.current_state else {
+                        k: np.zeros(v.shape, dtype=v.dtype)
+                        for k, v in self.observation_space.spaces.items()
+                    }
+                    return obs, {}
                 # Attempt to restart the Balatro process
                 try:
                     self._restart_balatro_process()
                 except Exception as restart_err:
                     logger.error(f"Failed to run restart routine: {restart_err}")
-                time.sleep(5.0)
+                time.sleep(10.0)
 
     def step(self, action: np.ndarray) -> Tuple[Dict[str, np.ndarray], float, bool, bool, dict]:
         if self.current_state is None:

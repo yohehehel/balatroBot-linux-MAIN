@@ -116,6 +116,16 @@ def main():
         # Inject graphics bypass and VSync override if not already present
         content = balatrobot_lua.read_text(encoding="utf-8")
         bypass_code = """
+-- Recursive no-op proxy: any property access or method call silently succeeds.
+local _bb_noop
+_bb_noop = setmetatable({}, {
+    __index = function() return _bb_noop end,
+    __call = function() return _bb_noop end,
+    __newindex = function() end,
+    __tostring = function() return "" end,
+    __len = function() return 0 end,
+})
+
 -- Bypass unlock popups to prevent the game/API from hanging during automated bot training
 local original_create_unlock_overlay = create_unlock_overlay
 create_unlock_overlay = function(key)
@@ -195,30 +205,47 @@ end
 -- pairs() hitting a NaN key sets (for control)=nan and crashes Lua regardless of dt.
 if EventManager then
   local old_event_update = EventManager.update
+  local _bb_consecutive_errors = 0
+  local _BB_MAX_CONSECUTIVE_ERRORS = 3
   EventManager.update = function(self, dt, forced)
     local safe_dt = math.min(dt, 0.5)
     local ok, err = pcall(old_event_update, self, safe_dt, forced)
     if not ok then
-      -- Rebuild each queue using ipairs to drop NaN-keyed entries
-      if self and self.queues then
-        local new_queues = {}
-        for queue_name, queue in pairs(self.queues) do
-          if type(queue_name) == "string" then
-            local clean = {}
-            local n = 0
-            for _, ev in ipairs(queue) do
-              n = n + 1
-              clean[n] = ev
+      _bb_consecutive_errors = _bb_consecutive_errors + 1
+      if _bb_consecutive_errors >= _BB_MAX_CONSECUTIVE_ERRORS then
+        sendInfoMessage("[WARN] " .. _bb_consecutive_errors .. " consecutive EventManager errors. CLEARING ALL QUEUES. Last error: " .. tostring(err), "BB.MOD")
+        if self and self.queues then
+          for queue_name, _ in pairs(self.queues) do
+            if type(queue_name) == "string" then
+              self.queues[queue_name] = {}
             end
-            new_queues[queue_name] = clean
           end
         end
-        self.queues = new_queues
+        _bb_consecutive_errors = 0
+      else
+        -- Rebuild each queue using ipairs to drop NaN-keyed entries
+        if self and self.queues then
+          local new_queues = {}
+          for queue_name, queue in pairs(self.queues) do
+            if type(queue_name) == "string" then
+              local clean = {}
+              local n = 0
+              for _, ev in ipairs(queue) do
+                n = n + 1
+                clean[n] = ev
+              end
+              new_queues[queue_name] = clean
+            end
+          end
+          self.queues = new_queues
+        end
       end
       if G then
         if G.CONTROLLER then G.CONTROLLER.locked = false end
         if G.SETTINGS then G.SETTINGS.paused = false end
       end
+    else
+      _bb_consecutive_errors = 0
     end
   end
 end
@@ -242,15 +269,12 @@ if G then
   G_mt.__index = function(t, k)
     if k == "round_eval" and G.STATE ~= G.STATES.ROUND_EVAL then
       return rawget(t, k) or setmetatable({
-        alignment = { offset = {} },
-        remove = function() end
+        alignment = { offset = { x=0, y=0 } },
+        remove = function() end,
+        T = { x=0, y=0, w=0, h=0, r=0, scale=1 },
+        VT = { x=0, y=0, w=0, h=0, r=0, scale=1 },
       }, {
-        __index = function(t2, k2)
-          return setmetatable({}, {
-            __index = function() return function() end end,
-            __call = function() end
-          })
-        end
+        __index = function() return _bb_noop end
       })
     end
     if type(original_G_index) == "function" then

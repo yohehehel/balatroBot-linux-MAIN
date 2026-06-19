@@ -414,6 +414,18 @@ print = function(...)
   original_print(lua_unpack(args))
 end
 
+-- Recursive no-op proxy: any property access or method call silently succeeds.
+-- Fixes 'attempt to call method add_child (a number value)' crashes caused by
+-- the old return 0 fallback in dummy G.round_eval metatables.
+local _bb_noop
+_bb_noop = setmetatable({}, {
+    __index = function() return _bb_noop end,
+    __call = function() return _bb_noop end,
+    __newindex = function() end,
+    __tostring = function() return "" end,
+    __len = function() return 0 end,
+})
+
 -- Bypass unlock popups to prevent the game/API from hanging during automated bot training
 local original_create_unlock_overlay = create_unlock_overlay
 create_unlock_overlay = function(key)
@@ -522,16 +534,7 @@ love.update = function(dt)
           T = { x=0, y=0, w=0, h=0, r=0, scale=1 },
           VT = { x=0, y=0, w=0, h=0, r=0, scale=1 },
         }, {
-          __index = function(t, k)
-            local methods = {
-              remove = true, draw = true, update = true, align = true, 
-              get_UIE_by_ID = true, juice_up = true, recreate = true
-            }
-            if methods[k] then
-              return function() end
-            end
-            return 0
-          end
+          __index = function() return _bb_noop end
         })
       end
       original_cash_out(e)
@@ -590,6 +593,8 @@ end
 if EventManager then
   local old_event_update = EventManager.update
   local event_manager_logged = false
+  local _bb_consecutive_errors = 0
+  local _BB_MAX_CONSECUTIVE_ERRORS = 3
   EventManager.update = function(self, dt, forced)
     if not event_manager_logged then
       sendInfoMessage("[DIAGNOSTIC] EventManager.update pcall guard active", "BB.MOD")
@@ -598,29 +603,46 @@ if EventManager then
     local safe_dt = math.min(dt, 0.5)
     local ok, err = pcall(old_event_update, self, safe_dt, forced)
     if not ok then
-      sendInfoMessage("[WARN] EventManager NaN crash caught: " .. tostring(err) .. " — sanitizing queues", "BB.MOD")
-      -- Rebuild each queue using ipairs: only sequential integer keys survive,
-      -- which drops any NaN-keyed entries that triggered the crash.
-      if self and self.queues then
-        local new_queues = {}
-        for queue_name, queue in pairs(self.queues) do
-          if type(queue_name) == "string" then
-            local clean = {}
-            local n = 0
-            for _, ev in ipairs(queue) do
-              n = n + 1
-              clean[n] = ev
+      _bb_consecutive_errors = _bb_consecutive_errors + 1
+      if _bb_consecutive_errors >= _BB_MAX_CONSECUTIVE_ERRORS then
+        -- Nuclear option: clear ALL queues to break infinite crash loops
+        -- (e.g. add_child errors that survive ipairs rebuilding)
+        sendInfoMessage("[WARN] " .. _bb_consecutive_errors .. " consecutive EventManager errors. CLEARING ALL QUEUES to break crash loop. Last error: " .. tostring(err), "BB.MOD")
+        if self and self.queues then
+          for queue_name, _ in pairs(self.queues) do
+            if type(queue_name) == "string" then
+              self.queues[queue_name] = {}
             end
-            new_queues[queue_name] = clean
           end
         end
-        self.queues = new_queues
+        _bb_consecutive_errors = 0
+      else
+        sendInfoMessage("[WARN] EventManager error (" .. _bb_consecutive_errors .. "/" .. _BB_MAX_CONSECUTIVE_ERRORS .. "): " .. tostring(err) .. " — sanitizing queues", "BB.MOD")
+        -- Rebuild each queue using ipairs: only sequential integer keys survive,
+        -- which drops any NaN-keyed entries that triggered the crash.
+        if self and self.queues then
+          local new_queues = {}
+          for queue_name, queue in pairs(self.queues) do
+            if type(queue_name) == "string" then
+              local clean = {}
+              local n = 0
+              for _, ev in ipairs(queue) do
+                n = n + 1
+                clean[n] = ev
+              end
+              new_queues[queue_name] = clean
+            end
+          end
+          self.queues = new_queues
+        end
       end
       -- Unfreeze game state so the bot can send the next API call
       if G then
         if G.CONTROLLER then G.CONTROLLER.locked = false end
         if G.SETTINGS then G.SETTINGS.paused = false end
       end
+    else
+      _bb_consecutive_errors = 0
     end
   end
 end
@@ -649,16 +671,7 @@ if G then
         T = { x=0, y=0, w=0, h=0, r=0, scale=1 },
         VT = { x=0, y=0, w=0, h=0, r=0, scale=1 },
       }, {
-        __index = function(t2, k2)
-          local methods = {
-            remove = true, draw = true, update = true, align = true, 
-            get_UIE_by_ID = true, juice_up = true, recreate = true
-          }
-          if methods[k2] then
-            return function() end
-          end
-          return 0
-        end
+        __index = function() return _bb_noop end
       })
     end
     if type(original_G_index) == "function" then
